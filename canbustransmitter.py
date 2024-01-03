@@ -1,22 +1,12 @@
 import threading
 import time
 import can
-#from dearpygui import dearpygui
 
 
-bus = None
+bus: can.BusABC = None
 J1939 = {}
 PGNs_pending_tx = {}
 
-
-def configure_can_interface(**params):
-    global bus
-    if params:
-        bus = can.thread_safe_bus.Bus(**params)
-
-def shutdown():
-    if bus is not None:
-        bus.shutdown()
 
 def add_pending_tx(sender, app_data, pgn):
     global PGNs_pending_tx
@@ -26,7 +16,7 @@ def add_pending_tx(sender, app_data, pgn):
         PGNs_pending_tx[pgn] = True
 
 
-def start_pgn_tx(*, pgn, priority, source_address, tx_rate_ms, spns: list[int], get_value_fn, cpu_time_dict):
+def start_pgn_tx(*, pgn, priority, source_address, tx_rate_ms, spns: list[int], get_value_fn):
     can_id = priority << 26 | pgn << 8 | source_address
     tx_rate_s = tx_rate_ms / 1000
 
@@ -37,10 +27,6 @@ def start_pgn_tx(*, pgn, priority, source_address, tx_rate_ms, spns: list[int], 
     def tx_pgn():
         while True:
             time.sleep(tx_rate_s)
-
-
-            #t_start = time.process_time()
-
 
             match get_value_fn('mode'), get_value_fn(f'{pgn} continuous tx'), PGNs_pending_tx[pgn]:
                 case ['Tx All', _, _] | ['Use PGN Settings', True, _]:
@@ -82,9 +68,5 @@ def start_pgn_tx(*, pgn, priority, source_address, tx_rate_ms, spns: list[int], 
                 bus.send(can.Message(arbitration_id=can_id, is_extended_id=True, data=data))
             else:
                 print('CAN ID:', f'{can_id:08X}', '  DATA:', data)
-
-            #t_end = time.process_time()
-            #cpu_time_dict[pgn]['l'] += t_end - t_start
-
 
     threading.Thread(target=tx_pgn, daemon=True).start()

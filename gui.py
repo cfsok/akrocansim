@@ -1,6 +1,10 @@
+import os
+import platform
+
 import dearpygui.dearpygui as dpg
 import canbustransmitter
-from J1939 import J1939, decode, encode, get_label, get_value
+import can
+from J1939 import J1939, decode, encode, get_label, get_label_value
 
 
 J1939 = {}
@@ -15,7 +19,7 @@ def set_signal_value(sender, new_value, old_value):
                                                  scale=J1939[pgn]['SPNs'][spn]['scale'],
                                                  offset=J1939[pgn]['SPNs'][spn]['offset']))
     elif sender_type == 'combo':
-        dpg.set_value(f'{spn}_raw_value', get_value(pgn=pgn, spn=spn, label=new_value))
+        dpg.set_value(f'{spn}_raw_value', get_label_value(pgn=pgn, spn=spn, label=new_value))
     #if new_value > old_value:
     #    ...
     #else:
@@ -43,8 +47,6 @@ def slider_max_value(pgn, spn):
         print('spn_max_value override [100_000]') ######################################################################################
         return 100_000 / J1939[pgn]['SPNs'][spn]['scale']
 
-
-cpu_time = {}
 
 def add_pgn(pgn, spns: list):
     priority = J1939[pgn]['Default Priority']
@@ -148,66 +150,76 @@ def add_pgn(pgn, spns: list):
 
         dpg.add_spacer(height=10)
 
-    cpu_time[pgn] = {'l': 0, 'b': 0}
     canbustransmitter.start_pgn_tx(pgn=pgn, priority=priority, source_address=source_address,
-                                   tx_rate_ms=J1939[pgn]['transmission_rate_ms'], spns=spns, get_value_fn=dpg.get_value,
-                                   cpu_time_dict=cpu_time)
-
-def display_signal(pgn, spn, raw_value):
-    if J1939[pgn]['SPNs'][spn]['scale'] == 'ENUM':
-        pass
-    else:
-        decoded_value = decode(raw_value=raw_value,
-                               scale=J1939[pgn]['SPNs'][spn]['scale'],
-                               offset=J1939[pgn]['SPNs'][spn]['offset'])
-        # :4.{len(str(J1939[pgn]['SPNs'][spn]['scale']).split('.')[1])}f
-        dpg.set_value(f'{pgn}_{spn}_input', decoded_value)
-        #dpg.set_item_user_data(f'{pgn}_{spn}_input', decoded_value)
-
-    match J1939[pgn]['SPNs'][spn]['length_bits'], J1939[pgn]['SPNs'][spn]['scale']:
-        case 1 | 2 | 3 | 4 as length_bits, 'ENUM':
-            nibble = f'{raw_value:X}'
-            dpg.set_value(f'{spn}_bin', f"{raw_value:0{length_bits}b}".ljust(10))
-            dpg.set_value(f'{spn}_hex', f'    [{nibble}]            ')
-        case 5 | 6 | 7 | 8 as length_bits, 'ENUM':
-            byte = f'{raw_value:02X}'
-            dpg.set_value(f'{spn}_bin', f"{raw_value:0{length_bits}b}".ljust(10))
-            dpg.set_value(f'{spn}_hex', f'   [{byte}]            ')
-        case 1 | 2 | 3 | 4, scale if scale not in ['ENUM']:
-            nimble = f'{raw_value:X}'
-            dpg.set_value(f'{spn}_hex', f'   [{nimble}]             ')
-        case 5 | 6 | 7 | 8, scale if scale not in ['ENUM']:
-            byte = f'{raw_value:02X}'
-            dpg.set_value(f'{spn}_hex', f'   [{byte}]            ')
-        case 16, _:
-            all_bytes = f'{raw_value:04X}'
-            byte1 = all_bytes[2:4]
-            byte2 = all_bytes[0:2]
-            dpg.set_value(f'{spn}_hex', f'LSB[{byte1} {byte2}]MSB      ')
-        case 32, _:
-            all_bytes = f'{raw_value:08X}'
-            byte1 = all_bytes[6:8]
-            byte2 = all_bytes[4:6]
-            byte3 = all_bytes[2:4]
-            byte4 = all_bytes[0:2]
-            dpg.set_value(f'{spn}_hex', f'LSB[{byte1} {byte2} {byte3} {byte4}]MSB')
+                                   tx_rate_ms=J1939[pgn]['transmission_rate_ms'], spns=spns, get_value_fn=dpg.get_value)
 
 
-def start_gui():
+def update_widgets():
+    for pgn, spns in Tx_PGNs_SPNs.items():
+        for spn in spns:
+            raw_value = dpg.get_value(f'{spn}_raw_value')
+            spn_spec = J1939[pgn]['SPNs'][spn]
+
+            if spn_spec['scale'] == 'ENUM':
+                pass
+            else:
+                decoded_value = decode(raw_value=raw_value,
+                                       scale=spn_spec['scale'],
+                                       offset=spn_spec['offset'])
+                # :4.{len(str(J1939[pgn]['SPNs'][spn]['scale']).split('.')[1])}f
+                dpg.set_value(f'{pgn}_{spn}_input', decoded_value)
+                #dpg.set_item_user_data(f'{pgn}_{spn}_input', decoded_value)
+
+            match spn_spec['length_bits'], spn_spec['scale']:
+                case 1 | 2 | 3 | 4 as length_bits, 'ENUM':
+                    nibble = f'{raw_value:X}'
+                    dpg.set_value(f'{spn}_bin', f"{raw_value:0{length_bits}b}".ljust(10))
+                    dpg.set_value(f'{spn}_hex', f'    [{nibble}]            ')
+                case 5 | 6 | 7 | 8 as length_bits, 'ENUM':
+                    byte = f'{raw_value:02X}'
+                    dpg.set_value(f'{spn}_bin', f"{raw_value:0{length_bits}b}".ljust(10))
+                    dpg.set_value(f'{spn}_hex', f'   [{byte}]            ')
+                case 1 | 2 | 3 | 4, scale if scale not in ['ENUM']:
+                    nimble = f'{raw_value:X}'
+                    dpg.set_value(f'{spn}_hex', f'   [{nimble}]             ')
+                case 5 | 6 | 7 | 8, scale if scale not in ['ENUM']:
+                    byte = f'{raw_value:02X}'
+                    dpg.set_value(f'{spn}_hex', f'   [{byte}]            ')
+                case 16, _:
+                    all_bytes = f'{raw_value:04X}'
+                    byte1 = all_bytes[2:4]
+                    byte2 = all_bytes[0:2]
+                    dpg.set_value(f'{spn}_hex', f'LSB[{byte1} {byte2}]MSB      ')
+                case 32, _:
+                    all_bytes = f'{raw_value:08X}'
+                    byte1 = all_bytes[6:8]
+                    byte2 = all_bytes[4:6]
+                    byte3 = all_bytes[2:4]
+                    byte4 = all_bytes[0:2]
+                    dpg.set_value(f'{spn}_hex', f'LSB[{byte1} {byte2} {byte3} {byte4}]MSB')
+
+
+def start_gui(bus: can.BusABC, config_file: str):
     window_width = 1200
     window_height = 600
     dpg.create_context()
     dpg.create_viewport(title='Akro CAN Simulator', width=window_width, height=window_height, vsync=True)
 
-    with dpg.window(label='CAN Tx Mode', width=window_width - 16):
+    with dpg.window(label=bus.channel_info, width=window_width - 16, no_close=True):
+        with dpg.menu_bar():
+            with dpg.menu(label="Settings"):
+                dpg.add_menu_item(label='Edit Configuration',
+                                  callback=lambda s, a, u: os.system(config_file) if platform.system() == 'Windows'
+                                  else os.system('%s %s' % (os.getenv('EDITOR'), config_file)))
+
         with dpg.group(horizontal=True):
             dpg.add_text('Continuous J1939 PGN transmission:')
             dpg.add_radio_button(tag='mode', items=('Stop All', 'Tx All', 'Use PGN Settings'),
                                  default_value='Stop All', horizontal=True)
-            dpg.add_button(label='Tx All PGNs Once', user_data='all PGNs',
-                           callback=canbustransmitter.add_pending_tx)
+        dpg.add_button(label='Tx All PGNs Once', user_data='all PGNs',
+                       callback=canbustransmitter.add_pending_tx)
 
-    with dpg.window(label='J1939', width=window_width - 16, pos=(0, 100), height=500):
+    with dpg.window(label='J1939', width=window_width - 16, pos=(0, 100), height=500, no_close=True):
         for pgn, spns in Tx_PGNs_SPNs.items():
             add_pgn(pgn, spns)
 
@@ -215,10 +227,10 @@ def start_gui():
     dpg.show_viewport()
 
     while dpg.is_dearpygui_running():
-        for pgn, spns in Tx_PGNs_SPNs.items():
-            for spn in spns:
-                display_signal(pgn, spn, dpg.get_value(f'{spn}_raw_value'))
+        update_widgets()
         dpg.render_dearpygui_frame()
 
     dpg.destroy_context()
-    canbustransmitter.shutdown()
+
+    if bus is not None:
+        bus.shutdown()

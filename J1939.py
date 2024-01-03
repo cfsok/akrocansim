@@ -12,7 +12,7 @@ def get_label(*, pgn, spn, raw_value):
     except KeyError:
         return ''
 
-def get_value(*, pgn, spn, label):
+def get_label_value(*, pgn, spn, label):
     for value, _label in J1939[pgn]['SPNs'][spn]['discrete_values'].items():
         if label == _label:
             return value

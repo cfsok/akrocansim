@@ -1,6 +1,6 @@
 """Akrocansim is a CAN bus J1939 controller simulator."""
 
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 
 from pathlib import Path
 import tomllib
@@ -8,6 +8,8 @@ import pickle
 import canbustransmitter
 import J1939
 import gui
+import can
+
 
 akrocansim_dir = 'akrocansim'
 
@@ -81,7 +83,8 @@ else:
         Tx_PGNs_SPNs[int(pgn)] = spn_list
     gui.Tx_PGNs_SPNs = Tx_PGNs_SPNs
 
-    canbustransmitter.configure_can_interface(**config['CAN_INTERFACE'])
+    if config['CAN_INTERFACE']:
+        canbustransmitter.bus = can.thread_safe_bus.Bus(**config['CAN_INTERFACE'])
 
 
 J1939_pickle = Path.home().joinpath(akrocansim_dir, 'J1939', 'J1939.pkl')
@@ -91,6 +94,6 @@ if J1939_pickle.exists():
     canbustransmitter.J1939 = J1939_dict
     J1939.J1939 = J1939_dict
     gui.J1939 = J1939_dict
-    gui.start_gui()
+    gui.start_gui(canbustransmitter.bus, str(config_file))
 
     print(f'Using {J1939_pickle}')

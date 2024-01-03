@@ -1,0 +1,25 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "akrocansim"
+dynamic = ["version", "description"]
+authors = [{name = "Socrates Vlassis", email = "socrates.vlassis@gmail.com"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Software Development :: Embedded Systems",
+    "Development Status :: 3 - Alpha"
+]
+keywords = ["J1939", "CAN bus"]
+requires-python = ">=3.11"
+dependencies = [
+    "dearpygui >= 1.10.1",
+    "python-can >= 4.3.1",
+    "openpyxl >= 3.1.2",
+]
+
+[project.urls]
+Home = "https://github.com/cfsok/akrocansim"
