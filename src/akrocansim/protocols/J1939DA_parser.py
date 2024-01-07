@@ -2,7 +2,6 @@
 # spn for lat, long max,scale problem
 # all bit mapped SPNs need GUI support
 # resolution: 8 bit bit-mapped
-import tomllib
 import pickle
 import json
 from pathlib import Path
@@ -11,30 +10,6 @@ from openpyxl import load_workbook
 
 bit_mapped_spns = [3344, 3345, 3346, 3347, 3348]
 ignore_discrete_value_spns = [4180, 4181]
-
-akrocansim_dir = 'akrocansim'
-
-config_file = Path.home().joinpath(akrocansim_dir, 'config.toml')
-
-with config_file.open('rb') as f:
-    config = tomllib.load(f)
-
-J1939_file = Path.home().joinpath(akrocansim_dir, 'J1939', config['J1939DA']['filename'])
-J1939_wb = load_workbook(filename=J1939_file)
-J1939_sheet = J1939_wb[config['J1939DA']['SPNs_and_PGNs_sheet']]
-spn_rows = config['J1939DA']['SPNs_to_parse']
-cols = config['J1939DA']['SPNs_and_PGNs_sheet_columns']
-
-J1939 = {}
-J1939_transmission_rates_dict = {}  # Mapping of [Transmission Rate] values to J1939...['tx_rate_ms']
-J1939_spn_positions_dict = {}  # Mapping of [SPN Position in PGN] values to J1939...['start_byte'], ['start_bit']
-J1939_spn_length_dict = {}  # Mapping of [SPN Length] values to J1939...['length_bits']
-J1939_resolution_dict = {}  # Mapping of [Resolution] values to J1939...['scale']
-J1939_offset_dict = {}  # Mapping of [Offset] values to J1939...['offset']
-J1939_data_range_dict = {}  # Mapping of [Data Range] values to J1939...['min_value'], ['max_value']
-J1939_operational_range_dict = {}  # Mapping of [Operational Range] values to J1939...['min_value'], ['max_value']
-J1939_unit_dict = {}  # Mapping of [Units] values to J1939...['unit']
-J1939_discrete_values_dict = {}  # Parsing of [SPN Description] values to identify J1939...['discrete_values']
 
 
 def map_transmission_rate(rate):
@@ -247,40 +222,6 @@ def map_transmission_rate(rate):
             case _:
                 tx_rate_ms = None
     return tx_rate_ms
-
-
-for n in range(spn_rows['first_row'], spn_rows['last_row'] + 1):
-    try:
-        _ = J1939[J1939_sheet[f"{cols['PGN']}{n}"].value]
-    except KeyError:
-        transmission_rate_ms = map_transmission_rate(J1939_sheet[f"{cols['Transmission Rate']}{n}"].value)
-        J1939_transmission_rates_dict[J1939_sheet[f"{cols['Transmission Rate']}{n}"].value] = transmission_rate_ms
-
-        J1939[J1939_sheet[f"{cols['PGN']}{n}"].value] = {
-            'Parameter Group Label': J1939_sheet[f"{cols['Parameter Group Label']}{n}"].value,
-            'Acronym': J1939_sheet[f"{cols['Acronym']}{n}"].value,
-            'PGN Description': J1939_sheet[f"{cols['PGN Description']}{n}"].value,
-            'PGN Data Length': J1939_sheet[f"{cols['PGN Data Length']}{n}"].value \
-                if J1939_sheet[f"{cols['PGN Data Length']}{n}"].value != 'Variable' else 8,
-            'Default Priority': J1939_sheet[f"{cols['Default Priority']}{n}"].value,
-            'Transmission Rate': J1939_sheet[f"{cols['Transmission Rate']}{n}"].value,
-            'transmission_rate_ms': transmission_rate_ms,
-            'SPNs': {}
-        }
-
-for n in range(spn_rows['first_row'], spn_rows['last_row'] + 1):
-    J1939[J1939_sheet[f"{cols['PGN']}{n}"].value]['SPNs'][J1939_sheet[f"{cols['SPN']}{n}"].value] = {
-        'SPN Name': J1939_sheet[f"{cols['SPN Name']}{n}"].value,
-        'SPN Description': J1939_sheet[f"{cols['SPN Description']}{n}"].value,
-        'SPN Position in PGN': J1939_sheet[f"{cols['SPN Position in PGN']}{n}"].value,
-        'SPN Length': J1939_sheet[f"{cols['SPN Length']}{n}"].value,
-        'Resolution': J1939_sheet[f"{cols['Resolution']}{n}"].value,
-        'Offset': J1939_sheet[f"{cols['Offset']}{n}"].value,
-        'Data Range': J1939_sheet[f"{cols['Data Range']}{n}"].value,
-        'Operational Range': J1939_sheet[f"{cols['Operational Range']}{n}"].value,
-        'Units': J1939_sheet[f"{cols['Units']}{n}"].value
-    }
-
 
 def map_spn_position(pos):
     if pos is None:
@@ -563,83 +504,127 @@ def parse_discrete_value_label(spn, spn_description):
 
     return value_label_dict
 
-pgn_count = 0
-spn_count = 0
-for pgn, pgn_spec in J1939.items():
-    pgn_count += 1
-    for spn, spn_spec in pgn_spec['SPNs'].items():
-        spn_count += 1
 
-        start_byte, start_bit = map_spn_position(spn_spec['SPN Position in PGN'])
-        spn_spec['start_byte'], spn_spec['start_bit'] = start_byte, start_bit
-        J1939_spn_positions_dict[spn_spec['SPN Position in PGN']] = {'start_byte': start_byte, 'start_bit': start_bit}
+def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
+    J1939_file = J1939_dir/J1939DA_config['filename']
+    J1939_wb = load_workbook(filename=J1939_file)
+    J1939_sheet = J1939_wb[J1939DA_config['SPNs_and_PGNs_sheet']]
+    spn_rows = J1939DA_config['SPNs_to_parse']
+    cols = J1939DA_config['SPNs_and_PGNs_sheet_columns']
 
-        length_bits = map_spn_length(spn_spec['SPN Length'])
-        spn_spec['length_bits'] = length_bits
-        J1939_spn_length_dict[spn_spec['SPN Length']] = length_bits
-
-        scale = map_resolution(spn_spec['Resolution'])
-        spn_spec['scale'] = scale
-        J1939_resolution_dict[spn_spec['Resolution']] = scale
-
-        spn_spec['n_decimals'] = len(str(scale).split('.')[-1]) if str(scale).count('.') else 0
-
-        offset = map_offset(spn_spec['Offset'])
-        spn_spec['offset'] = offset
-        J1939_offset_dict[spn_spec['Offset']] = offset
-
-        min_value, max_value = map_data_range(spn_spec['Data Range'])
-        op_min_value, op_max_value = map_operational_range(spn_spec['Operational Range'])
-        spn_spec['min_value'] = min_value if op_min_value is None else op_min_value
-        spn_spec['max_value'] = max_value if op_max_value is None else op_max_value
-        J1939_data_range_dict[spn_spec['Data Range']] = {'min_value': min_value, 'max_value': max_value}
-        J1939_operational_range_dict[spn_spec['Operational Range']] = {'min_value': op_min_value, 'max_value': op_max_value}
-
-        unit = map_units(spn_spec['Units'])
-        spn_spec['unit'] = unit
-        J1939_unit_dict[spn_spec['Units']] = unit
-
-        if spn_spec['Units'] in ['bit', 'bit-mapped'] and spn not in ignore_discrete_value_spns:
-            value_label_dict = parse_discrete_value_label(spn, spn_spec['SPN Description'])
-
-            J1939_discrete_values_dict[spn] = {'scale': scale} | dict.fromkeys(range(2**spn_spec['length_bits']))
-
-            if spn in bit_mapped_spns:
-                spn_spec['scale'] = 'BIT_MAPPED'
-                J1939_discrete_values_dict[spn] = {'scale': 'BIT_MAPPED'}
-
-            spn_spec['discrete_values'] = {}
-
-            for value, labels in value_label_dict.items():
-                spn_spec['discrete_values'][value] = labels
-                J1939_discrete_values_dict[spn][value] = labels
-
-print(f'Processed {pgn_count} PGNs and {spn_count} SPNs.')
+    J1939 = {}
+    J1939_transmission_rates_dict = {}  # Mapping of [Transmission Rate] values to J1939...['tx_rate_ms']
+    J1939_spn_positions_dict = {}  # Mapping of [SPN Position in PGN] values to J1939...['start_byte'], ['start_bit']
+    J1939_spn_length_dict = {}  # Mapping of [SPN Length] values to J1939...['length_bits']
+    J1939_resolution_dict = {}  # Mapping of [Resolution] values to J1939...['scale']
+    J1939_offset_dict = {}  # Mapping of [Offset] values to J1939...['offset']
+    J1939_data_range_dict = {}  # Mapping of [Data Range] values to J1939...['min_value'], ['max_value']
+    J1939_operational_range_dict = {}  # Mapping of [Operational Range] values to J1939...['min_value'], ['max_value']
+    J1939_unit_dict = {}  # Mapping of [Units] values to J1939...['unit']
+    J1939_discrete_values_dict = {}  # Parsing of [SPN Description] values to identify J1939...['discrete_values']
 
 
-def save_J1939DA_element_map(*, map, filename_descriptor):
-    map_json = Path.home().joinpath(
-        akrocansim_dir, 'J1939',
-        f"{config['J1939DA']['filename'].removesuffix('.xlsx')}_{filename_descriptor}_map.json")
-    with map_json.open('w', encoding='utf-8') as f:
-        json.dump(map, f, indent=4, ensure_ascii=False)
+    for n in range(spn_rows['first_row'], spn_rows['last_row'] + 1):
+        try:
+            _ = J1939[J1939_sheet[f"{cols['PGN']}{n}"].value]
+        except KeyError:
+            transmission_rate_ms = map_transmission_rate(J1939_sheet[f"{cols['Transmission Rate']}{n}"].value)
+            J1939_transmission_rates_dict[J1939_sheet[f"{cols['Transmission Rate']}{n}"].value] = transmission_rate_ms
 
-save_J1939DA_element_map(map=J1939_transmission_rates_dict, filename_descriptor='transmission_rates')
-save_J1939DA_element_map(map=J1939_spn_positions_dict, filename_descriptor='spn_positions')
-save_J1939DA_element_map(map=J1939_spn_length_dict, filename_descriptor='spn_lengths')
-save_J1939DA_element_map(map=J1939_resolution_dict, filename_descriptor='resolutions')
-save_J1939DA_element_map(map=J1939_offset_dict, filename_descriptor='offsets')
-save_J1939DA_element_map(map=J1939_data_range_dict, filename_descriptor='data_ranges')
-save_J1939DA_element_map(map=J1939_operational_range_dict, filename_descriptor='operational_ranges')
-save_J1939DA_element_map(map=J1939_unit_dict, filename_descriptor='units')
-save_J1939DA_element_map(map=J1939_discrete_values_dict, filename_descriptor='discrete_values')
+            J1939[J1939_sheet[f"{cols['PGN']}{n}"].value] = {
+                'Parameter Group Label': J1939_sheet[f"{cols['Parameter Group Label']}{n}"].value,
+                'Acronym': J1939_sheet[f"{cols['Acronym']}{n}"].value,
+                'PGN Description': J1939_sheet[f"{cols['PGN Description']}{n}"].value,
+                'PGN Data Length': J1939_sheet[f"{cols['PGN Data Length']}{n}"].value \
+                    if J1939_sheet[f"{cols['PGN Data Length']}{n}"].value != 'Variable' else 8,
+                'Default Priority': J1939_sheet[f"{cols['Default Priority']}{n}"].value,
+                'Transmission Rate': J1939_sheet[f"{cols['Transmission Rate']}{n}"].value,
+                'transmission_rate_ms': transmission_rate_ms,
+                'SPNs': {}
+            }
+
+    for n in range(spn_rows['first_row'], spn_rows['last_row'] + 1):
+        J1939[J1939_sheet[f"{cols['PGN']}{n}"].value]['SPNs'][J1939_sheet[f"{cols['SPN']}{n}"].value] = {
+            'SPN Name': J1939_sheet[f"{cols['SPN Name']}{n}"].value,
+            'SPN Description': J1939_sheet[f"{cols['SPN Description']}{n}"].value,
+            'SPN Position in PGN': J1939_sheet[f"{cols['SPN Position in PGN']}{n}"].value,
+            'SPN Length': J1939_sheet[f"{cols['SPN Length']}{n}"].value,
+            'Resolution': J1939_sheet[f"{cols['Resolution']}{n}"].value,
+            'Offset': J1939_sheet[f"{cols['Offset']}{n}"].value,
+            'Data Range': J1939_sheet[f"{cols['Data Range']}{n}"].value,
+            'Operational Range': J1939_sheet[f"{cols['Operational Range']}{n}"].value,
+            'Units': J1939_sheet[f"{cols['Units']}{n}"].value
+        }
+
+    pgn_count = 0
+    spn_count = 0
+    for pgn, pgn_spec in J1939.items():
+        pgn_count += 1
+        for spn, spn_spec in pgn_spec['SPNs'].items():
+            spn_count += 1
+
+            start_byte, start_bit = map_spn_position(spn_spec['SPN Position in PGN'])
+            spn_spec['start_byte'], spn_spec['start_bit'] = start_byte, start_bit
+            J1939_spn_positions_dict[spn_spec['SPN Position in PGN']] = {'start_byte': start_byte, 'start_bit': start_bit}
+
+            length_bits = map_spn_length(spn_spec['SPN Length'])
+            spn_spec['length_bits'] = length_bits
+            J1939_spn_length_dict[spn_spec['SPN Length']] = length_bits
+
+            scale = map_resolution(spn_spec['Resolution'])
+            spn_spec['scale'] = scale
+            J1939_resolution_dict[spn_spec['Resolution']] = scale
+
+            spn_spec['n_decimals'] = len(str(scale).split('.')[-1]) if str(scale).count('.') else 0
+
+            offset = map_offset(spn_spec['Offset'])
+            spn_spec['offset'] = offset
+            J1939_offset_dict[spn_spec['Offset']] = offset
+
+            min_value, max_value = map_data_range(spn_spec['Data Range'])
+            op_min_value, op_max_value = map_operational_range(spn_spec['Operational Range'])
+            spn_spec['min_value'] = min_value if op_min_value is None else op_min_value
+            spn_spec['max_value'] = max_value if op_max_value is None else op_max_value
+            J1939_data_range_dict[spn_spec['Data Range']] = {'min_value': min_value, 'max_value': max_value}
+            J1939_operational_range_dict[spn_spec['Operational Range']] = {'min_value': op_min_value, 'max_value': op_max_value}
+
+            unit = map_units(spn_spec['Units'])
+            spn_spec['unit'] = unit
+            J1939_unit_dict[spn_spec['Units']] = unit
+
+            if spn_spec['Units'] in ['bit', 'bit-mapped'] and spn not in ignore_discrete_value_spns:
+                value_label_dict = parse_discrete_value_label(spn, spn_spec['SPN Description'])
+
+                J1939_discrete_values_dict[spn] = {'scale': scale} | dict.fromkeys(range(2**spn_spec['length_bits']))
+
+                if spn in bit_mapped_spns:
+                    spn_spec['scale'] = 'BIT_MAPPED'
+                    J1939_discrete_values_dict[spn] = {'scale': 'BIT_MAPPED'}
+
+                spn_spec['discrete_values'] = {}
+
+                for value, labels in value_label_dict.items():
+                    spn_spec['discrete_values'][value] = labels
+                    J1939_discrete_values_dict[spn][value] = labels
 
 
-J1939_json = Path.home().joinpath(akrocansim_dir, 'J1939',
-                                  f"{config['J1939DA']['filename'].removesuffix('.xlsx')}.json")
-with J1939_json.open('w') as f:
-    json.dump(J1939, f, indent=4)
+    def save_json(file: Path, J1939_dict: dict):
+        with file.open('w', encoding='utf-8') as f:
+            json.dump(J1939_dict, f, indent=4, ensure_ascii=False)
+    base_filename = J1939DA_config['filename'].removesuffix('.xlsx')
+    save_json(J1939_dir/f'{base_filename}.json', J1939)
+    save_json(J1939_dir/f'{base_filename}_transmission_rates.json', J1939_transmission_rates_dict)
+    save_json(J1939_dir/f'{base_filename}_spn_positions.json', J1939_spn_positions_dict)
+    save_json(J1939_dir/f'{base_filename}_spn_lengths.json', J1939_spn_length_dict)
+    save_json(J1939_dir/f'{base_filename}_.resolutionsjson', J1939_resolution_dict)
+    save_json(J1939_dir/f'{base_filename}_offsets.json', J1939_offset_dict)
+    save_json(J1939_dir/f'{base_filename}_data_ranges.json', J1939_data_range_dict)
+    save_json(J1939_dir/f'{base_filename}_operational_ranges.json', J1939_operational_range_dict)
+    save_json(J1939_dir/f'{base_filename}_units.json', J1939_unit_dict)
+    save_json(J1939_dir/f'{base_filename}_discrete_values.json', J1939_discrete_values_dict)
 
-J1939_pkl = Path.home().joinpath(akrocansim_dir, 'J1939', 'J1939.pkl')
-with J1939_pkl.open('wb') as f:
-    pickle.dump(J1939, f)
+    J1939_pkl = J1939_dir/'J1939.pkl'
+    with J1939_pkl.open('wb') as f:
+        pickle.dump(J1939, f)
+
+    return f'Processed {pgn_count} PGNs and {spn_count} SPNs.'
