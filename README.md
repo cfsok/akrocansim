@@ -11,6 +11,6 @@ Run: `python -m akrocansim`
 
 Feel free to raise issues at https://github.com/cfsok/akrocansim/issues
 
-![Akrocansim demo screenshot 1](https://github.com/cfsok/akrocansim/blob/main/docs/demo_1_Akrocansim.png)
-![Akrocansim demo screenshot 2](https://github.com/cfsok/akrocansim/blob/main/docs/demo_2_Akrocansim.png)
-![PCAN-View demo screenshot 1](https://github.com/cfsok/akrocansim/blob/main/docs/demo_1_PCAN-View.png)
+![Akrocansim demo screenshot 1](https://raw.githubusercontent.com/cfsok/akrocansim/main/docs/demo_1_Akrocansim.png)
+![Akrocansim demo screenshot 2](https://raw.githubusercontent.com/cfsok/akrocansim/main/docs/demo_2_Akrocansim.png)
+![PCAN-View demo screenshot 1](https://raw.githubusercontent.com/cfsok/akrocansim/main/docs/demo_1_PCAN-View.png)
