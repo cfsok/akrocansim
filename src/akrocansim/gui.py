@@ -31,20 +31,18 @@ def set_label(spn, new_value, pgn):
     dpg.set_value(f'{pgn}_{spn}_combo', protocols.get_label(signal_spec=spn_spec, raw_value=new_value))
 
 def slider_min_value(pgn, spn):
-    min_value = protocols.encode(decoded_value=J1939[pgn]['SPNs'][spn]['min_value'],
-                                 offset=J1939[pgn]['SPNs'][spn]['offset'],
-                                 scale=J1939[pgn]['SPNs'][spn]['scale'])
+    spn_spec = J1939[pgn]['SPNs'][spn]
+    min_value = protocols.encode(decoded_value=spn_spec['min_value'], offset=spn_spec['offset'], scale=spn_spec['scale'])
     return min_value
 
 def slider_max_value(pgn, spn):
-    max_value = protocols.encode(decoded_value=J1939[pgn]['SPNs'][spn]['max_value'],
-                                 offset=J1939[pgn]['SPNs'][spn]['offset'],
-                                 scale=J1939[pgn]['SPNs'][spn]['scale'])
-    if J1939[pgn]['SPNs'][spn]['length_bits'] < 32 or spn in [584, 585]: ###########################################################
+    spn_spec = J1939[pgn]['SPNs'][spn]
+    max_value = protocols.encode(decoded_value=spn_spec['max_value'], offset=spn_spec['offset'], scale=spn_spec['scale'])
+    if spn_spec['length_bits'] < 32 or spn in [584, 585]: ###########################################################
         return max_value
     else:
         print('spn_max_value override [100_000]') ######################################################################################
-        return 100_000 / J1939[pgn]['SPNs'][spn]['scale']
+        return 100_000 / spn_spec['scale']
 
 def add_pgn(J1939, pgn, spns: list, bus: caninterface.Bus):
     priority = J1939[pgn]['Default Priority']
@@ -58,9 +56,10 @@ def add_pgn(J1939, pgn, spns: list, bus: caninterface.Bus):
         enum_signals_present = False
 
         for spn in spns:
-            if J1939[pgn]['SPNs'][spn]['scale'] not in ['ENUM']:
+            spn_spec = J1939[pgn]['SPNs'][spn]
+            if spn_spec['scale'] not in ['ENUM']:
                 continuous_signals_present = True
-            if J1939[pgn]['SPNs'][spn]['scale'] == 'ENUM':
+            if spn_spec['scale'] == 'ENUM':
                 enum_signals_present = True
 
         if continuous_signals_present:
@@ -72,32 +71,31 @@ def add_pgn(J1939, pgn, spns: list, bus: caninterface.Bus):
                 dpg.add_table_column(label='RAW DECIMAL')
 
                 for spn in spns:
-                    if J1939[pgn]['SPNs'][spn]['scale'] not in ['ENUM']:
+                    spn_spec = J1939[pgn]['SPNs'][spn]
+                    if spn_spec['scale'] not in ['ENUM']:
                         with dpg.table_row():
                             # SIGNAL - decoded value, direct entry, decrement, decrement
-                            max_value = (2 ** J1939[pgn]['SPNs'][spn]['length_bits'] - 1) \
-                                        * J1939[pgn]['SPNs'][spn]['scale'] \
-                                        + J1939[pgn]['SPNs'][spn]['offset']
-                            if type(J1939[pgn]['SPNs'][spn]['scale']) is int:
+                            max_value = (2 ** spn_spec['length_bits'] - 1) * spn_spec['scale'] + spn_spec['offset']
+                            if type(spn_spec['scale']) is int:
                                 dpg.add_input_int(tag=f'{pgn}_{spn}_input', width=140,
-                                                  min_value=J1939[pgn]['SPNs'][spn]['offset'],
+                                                  min_value=spn_spec['offset'],
                                                   max_value=max_value,
                                                   min_clamped=True, max_clamped=True,
-                                                  step=J1939[pgn]['SPNs'][spn]['scale'],
+                                                  step=spn_spec['scale'],
                                                   callback=set_signal_value, on_enter=True)
-                            elif type(J1939[pgn]['SPNs'][spn]['scale']) is float:
+                            elif type(spn_spec['scale']) is float:
                                 dpg.add_input_float(tag=f'{pgn}_{spn}_input', width=140,
-                                                    format=f"%.{J1939[pgn]['SPNs'][spn]['n_decimals']}f",
-                                                    min_value=J1939[pgn]['SPNs'][spn]['offset'],
+                                                    format=f"%.{spn_spec['n_decimals']}f",
+                                                    min_value=spn_spec['offset'],
                                                     max_value=max_value,
                                                     min_clamped=True, max_clamped=True,
-                                                    step=J1939[pgn]['SPNs'][spn]['scale'],
+                                                    step=spn_spec['scale'],
                                                     callback=set_signal_value, on_enter=True)
                             else:
                                 raise TypeError
 
                             # UNIT
-                            unit = J1939[pgn]['SPNs'][spn]['unit']
+                            unit = spn_spec['unit']
                             dpg.add_text(f"{unit if unit is not None else ''}".ljust(10))
 
                             # RAW HEX
@@ -105,7 +103,7 @@ def add_pgn(J1939, pgn, spns: list, bus: caninterface.Bus):
 
                             # RAW DECIMAL
                             dpg.add_slider_int(tag=f'{spn}_raw_value', user_data=pgn,
-                                               label=f"SPN {spn}: {J1939[pgn]['SPNs'][spn]['SPN Name']}",
+                                               label=f"SPN {spn}: {spn_spec['SPN Name']}",
                                                min_value=slider_min_value(pgn, spn),
                                                max_value=slider_max_value(pgn, spn),
                                                default_value=slider_min_value(pgn, spn))
@@ -128,7 +126,7 @@ def add_pgn(J1939, pgn, spns: list, bus: caninterface.Bus):
                             dpg.add_input_int(tag=f'{spn}_raw_value', width=140, user_data=pgn,
                                               min_value=0, max_value=2 ** spn_spec['length_bits'] - 1,
                                               min_clamped=True, max_clamped=True,
-                                              callback = set_label, on_enter = True)
+                                              callback=set_label, on_enter=True)
 
                             # BINARY
                             dpg.add_text(tag=f'{spn}_bin')
