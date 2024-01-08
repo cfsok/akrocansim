@@ -10,8 +10,10 @@ readme = "README.md"
 license = {file = "LICENSE"}
 classifiers = [
     "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
     "Topic :: Software Development :: Embedded Systems",
-    "Development Status :: 3 - Alpha"
+    "Topic :: Software Development :: Embedded Systems :: Controller Area Network (CAN)",
+    "Topic :: Software Development :: Embedded Systems :: Controller Area Network (CAN) :: J1939"
 ]
 keywords = ["J1939", "CAN bus"]
 requires-python = ">=3.11"
