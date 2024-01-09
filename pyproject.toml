@@ -9,11 +9,14 @@ authors = [{name = "Socrates Vlassis", email = "socrates.vlassis@gmail.com"}]
 readme = "README.md"
 license = {file = "LICENSE"}
 classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "License :: OSI Approved :: MIT License",
     "Development Status :: 4 - Beta",
-    "Topic :: Software Development :: Embedded Systems",
-    "Topic :: Software Development :: Embedded Systems :: Controller Area Network (CAN)",
-    "Topic :: Software Development :: Embedded Systems :: Controller Area Network (CAN) :: J1939"
+    "Topic :: Software Development :: Embedded Systems"#,
+    #"Topic :: Software Development :: Embedded Systems :: Controller Area Network (CAN)",
+    #"Topic :: Software Development :: Embedded Systems :: Controller Area Network (CAN) :: J1939"
 ]
 keywords = ["J1939", "CAN bus"]
 requires-python = ">=3.11"
