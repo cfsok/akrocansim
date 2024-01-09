@@ -14,11 +14,11 @@ def set_signal_value(sender, new_value, old_value):
     pgn, spn, sender_type = sender.split('_')
     spn_spec = J1939[int(pgn)]['SPNs'][int(spn)]
     if sender_type == 'input':
-        dpg.set_value(f'{spn}_raw_value', protocols.encode(decoded_value=new_value,
+        dpg.set_value(str(spn), protocols.encode(decoded_value=new_value,
                                                                 scale=spn_spec['scale'],
                                                                 offset=spn_spec['offset']))
     elif sender_type == 'combo':
-        dpg.set_value(f'{spn}_raw_value', protocols.get_label_value(signal_spec=spn_spec, label=new_value))
+        dpg.set_value(str(spn), protocols.get_label_value(signal_spec=spn_spec, label=new_value))
     #if new_value > old_value:
     #    ...
     #else:
@@ -44,7 +44,7 @@ def slider_max_value(pgn, spn):
         print('spn_max_value override [100_000]') ######################################################################################
         return 100_000 / spn_spec['scale']
 
-def add_pgn(J1939, pgn, spns: list, bus: caninterface.Bus):
+def add_pgn(J1939, pgn, spns: list, bus: caninterface.BusHandler):
     priority = J1939[pgn]['Default Priority']
     source_address = 0
 
@@ -102,7 +102,7 @@ def add_pgn(J1939, pgn, spns: list, bus: caninterface.Bus):
                             dpg.add_text(tag=f'{spn}_hex')
 
                             # RAW DECIMAL
-                            dpg.add_slider_int(tag=f'{spn}_raw_value', user_data=pgn,
+                            dpg.add_slider_int(tag=str(spn), user_data=pgn,
                                                label=f"SPN {spn}: {spn_spec['SPN Name']}",
                                                min_value=slider_min_value(pgn, spn),
                                                max_value=slider_max_value(pgn, spn),
@@ -123,7 +123,7 @@ def add_pgn(J1939, pgn, spns: list, bus: caninterface.Bus):
                         with dpg.table_row():
 
                             # DECIMAL
-                            dpg.add_input_int(tag=f'{spn}_raw_value', width=140, user_data=pgn,
+                            dpg.add_input_int(tag=str(spn), width=140, user_data=pgn,
                                               min_value=0, max_value=2 ** spn_spec['length_bits'] - 1,
                                               min_clamped=True, max_clamped=True,
                                               callback=set_label, on_enter=True)
@@ -173,7 +173,7 @@ def gui_main():
             global J1939
             J1939 = protocols.J1939(config.J1939_pickle)
             try:
-                bus = caninterface.Bus(J1939, **config['CAN_INTERFACE'])
+                bus_handler = caninterface.BusHandler(J1939, **config['CAN_INTERFACE'])
 
             except CanError as e:
                 error_messages += f'- CAN interface initialisation error: {e}\n'
@@ -185,13 +185,13 @@ def gui_main():
 
         if error_messages:
             error_messages = (f'The following errors have been detected:\n{error_messages}'
-                              f'Follow the instructions in the configuration file and restart Akrocansim.')
+                              f'Follow the instructions in the configuration file and restart akrocansim.')
 
 
     window_width = 1200
-    window_height = 600
+    window_height = 650
     dpg.create_context()
-    dpg.create_viewport(title='Akro CAN Simulator', width=window_width, height=window_height, vsync=True)
+    dpg.create_viewport(title='akro CAN Simulator', width=window_width, height=window_height, vsync=True)
 
     def make_init_buttons():
         with dpg.group(horizontal=True):
@@ -205,7 +205,7 @@ def gui_main():
     if not config_loaded:
         with dpg.window(label='Configuration required', width=window_width - 16, height=window_height, no_close=True):
             dpg.add_text(f'Configuration file created at: {config.config_toml}\n'
-                         f'Follow the instructions in the configuration file and restart Akrocansim.')
+                         f'Follow the instructions in the configuration file and restart akrocansim.')
             make_init_buttons()
     elif error_messages:
         with dpg.window(label='Configuration incomplete', width=window_width - 16, height=window_height, no_close=True):
@@ -215,7 +215,7 @@ def gui_main():
     # Everything correctly configured when below code runs
     else:
         try:
-            window_label = ''
+            window_label = bus_handler.bus.channel_info
         except AttributeError:
             window_label = 'No Hardware Interface'
         with dpg.window(label=window_label, width=window_width - 16, no_close=True):
@@ -228,11 +228,11 @@ def gui_main():
                 dpg.add_text('Continuous J1939 PGN transmission:')
                 dpg.add_radio_button(tag='mode', items=('Stop All', 'Tx All', 'Use PGN Settings'),
                                      default_value='Stop All', horizontal=True)
-            dpg.add_button(label='Tx All PGNs Once', user_data='all PGNs', callback=bus.add_pending_tx)
+            dpg.add_button(label='Tx All PGNs Once', user_data='all PGNs', callback=bus_handler.add_pending_tx)
 
         with dpg.window(label='J1939', width=window_width - 16, pos=(0, 100), height=500, no_close=True):
             for pgn, spns in tx_PGNs_SPNs.items():
-                add_pgn(J1939, pgn, spns, bus)
+                add_pgn(J1939, pgn, spns, bus_handler)
 
     dpg.setup_dearpygui()
     dpg.show_viewport()
@@ -243,7 +243,7 @@ def gui_main():
         while dpg.is_dearpygui_running():
             for pgn, spns in tx_PGNs_SPNs.items():
                 for spn in spns:
-                    raw_value = dpg.get_value(f'{spn}_raw_value')
+                    raw_value = dpg.get_value(str(spn))
                     signal_spec = J1939[pgn]['SPNs'][spn]
 
                     if signal_spec['scale'] == 'ENUM':
@@ -287,4 +287,4 @@ def gui_main():
             dpg.render_dearpygui_frame()
 
     dpg.destroy_context()
-    bus.shutdown()
+    bus_handler.bus.shutdown()

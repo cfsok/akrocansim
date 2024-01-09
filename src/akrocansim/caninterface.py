@@ -3,10 +3,10 @@ import time
 import can
 
 
-class Bus:
+class BusHandler:
     def __init__(self, J1939: dict, **bus_config_params):
         self._J1939 = J1939
-        self._bus = can.thread_safe_bus.Bus(**bus_config_params)
+        self.bus = can.thread_safe_bus.Bus(**bus_config_params)
         self.PGNs_pending_tx = {}
 
     def add_pending_tx(self, sender, app_data, pgn):
@@ -41,7 +41,7 @@ class Bus:
                         raise ValueError('Unknown tx arbitration error')
 
                 for spn in spns:
-                    spn_raw_value_tag = f'{spn}_raw_value'
+                    spn_raw_value_tag = str(spn)
                     spn_spec = self._J1939[pgn]['SPNs'][spn]
                     start_byte = spn_spec['start_byte']
                     match spn_spec['length_bits']:
@@ -63,9 +63,6 @@ class Bus:
                             data[start_byte + 2] = get_value_fn(spn_raw_value_tag) >> 16 & 0x00FF
                             data[start_byte + 3] = get_value_fn(spn_raw_value_tag) >> 24
 
-                self._bus.send(can.Message(arbitration_id=can_id, is_extended_id=True, data=data))
+                self.bus.send(can.Message(arbitration_id=can_id, is_extended_id=True, data=data))
 
         threading.Thread(target=tx_pgn, daemon=True).start()
-
-    def shutdown(self):
-        self._bus.shutdown()
