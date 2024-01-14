@@ -21,26 +21,28 @@ A CAN bus J1939 controller simulator.
   - direct entry of raw decimal values
   - direct entry of decoded decimal values
 
-![Akrocansim demo screenshot 1](https://raw.githubusercontent.com/cfsok/akrocansim/main/docs/images/demo_1_Akrocansim.png)
+![Akrocansim demo screenshot](https://raw.githubusercontent.com/cfsok/akrocansim/main/docs/images/demo_2_Akrocansim.png)
 
-![Akrocansim demo screenshot 2](https://raw.githubusercontent.com/cfsok/akrocansim/main/docs/images/demo_2_Akrocansim.png)
-
-![PCAN-View demo screenshot 1](https://raw.githubusercontent.com/cfsok/akrocansim/main/docs/images/demo_1_PCAN-View.png)
+![PCAN-View demo screenshot](https://raw.githubusercontent.com/cfsok/akrocansim/main/docs/images/demo_1_PCAN-View.png)
 
 ## Installation
 Python 3.11 (64-bit) or higher is required.
 
-```pip install akrocansim```
+```
+pip install akrocansim
+```
 
 ## Prerequisites
-- A hardware CAN interface supported by python-can (support for virtual interfaces could be added - let me know),
+- A hardware CAN interface supported by python-can,
 see https://python-can.readthedocs.io/en/v4.3.1/interfaces.html.
 - A version of J1939 Digital Annex (J1939DA) from SAE International, see https://www.sae.org/standards/?search=j1939DA.
 - A way to reliably convert `.xls` to `.xlsx` if your copy of the J1939DA is in `.xls` format
 (Microsoft Excel obviously works, but I am not sure of third party tool).
 
 ## Usage
-```python -m akrocansim```
+```
+python -m akrocansim
+```
 
 Upon initial run, an `akrocansim` folder is created in your home folder hosting a starting configuration file.
 

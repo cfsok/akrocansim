@@ -1,4 +1,5 @@
 # SPN that still need handling: 7585, 6973, 6317(check), 3192, 5433(check), 900, 899, 927, 7716, 2928, 5677(check), 5678(check), 7750
+# SPN 584, 585 are not handled correctly - 2**32 max value not supported
 # spn for lat, long max,scale problem
 # all bit mapped SPNs need GUI support
 # resolution: 8 bit bit-mapped
@@ -12,7 +13,7 @@ bit_mapped_spns = [3344, 3345, 3346, 3347, 3348]
 ignore_discrete_value_spns = [4180, 4181]
 
 
-def map_transmission_rate(rate):
+def _map_transmission_rate(rate):
     if rate is None:
         tx_rate_ms = None
     else:
@@ -223,7 +224,7 @@ def map_transmission_rate(rate):
                 tx_rate_ms = None
     return tx_rate_ms
 
-def map_spn_position(pos):
+def _map_spn_position(pos):
     if pos is None:
         start_byte = None
         start_bit = None
@@ -293,7 +294,7 @@ def map_spn_position(pos):
                 start_bit = None
     return start_byte, start_bit
 
-def map_spn_length(length):
+def _map_spn_length(length):
     if length is None:
         length_bits = None
     else:
@@ -306,7 +307,7 @@ def map_spn_length(length):
                 length_bits = None
     return length_bits
 
-def map_resolution(res):
+def _map_resolution(res):
     if res is None:
         scale = 1
     else:
@@ -337,7 +338,7 @@ def map_resolution(res):
                 scale = None
     return scale
 
-def map_offset(offset):
+def _map_offset(offset):
     if offset is None:
         _offset = None
     else:
@@ -348,7 +349,7 @@ def map_offset(offset):
             _offset = float(num)
     return _offset
 
-def map_data_range(data_range):
+def _map_data_range(data_range):
     if data_range is None:
         min_value = None
         max_value = None
@@ -371,7 +372,7 @@ def map_data_range(data_range):
                 max_value = None
     return min_value, max_value
 
-def map_operational_range(op_range):
+def _map_operational_range(op_range):
     operational_min_value = None
     operational_max_value = None
     if op_range is not None:
@@ -445,7 +446,7 @@ def map_operational_range(op_range):
                     operational_max_value = float(max)
     return operational_min_value, operational_max_value
 
-def map_units(unit):
+def _map_units(unit):
     _unit = None
     if unit is not None:
         match unit:
@@ -455,7 +456,7 @@ def map_units(unit):
                 _unit = unit
     return _unit
 
-def parse_discrete_value_label(spn, spn_description):
+def _parse_discrete_value_label(spn, spn_description):
     last_checked = 'xxx'#7750
     last_checked_reached = False
     if spn == last_checked:
@@ -504,7 +505,6 @@ def parse_discrete_value_label(spn, spn_description):
 
     return value_label_dict
 
-
 def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
     J1939_file = J1939_dir/J1939DA_config['filename']
     J1939_wb = load_workbook(filename=J1939_file)
@@ -528,7 +528,7 @@ def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
         try:
             _ = J1939[J1939_sheet[f"{cols['PGN']}{n}"].value]
         except KeyError:
-            transmission_rate_ms = map_transmission_rate(J1939_sheet[f"{cols['Transmission Rate']}{n}"].value)
+            transmission_rate_ms = _map_transmission_rate(J1939_sheet[f"{cols['Transmission Rate']}{n}"].value)
             J1939_transmission_rates_dict[J1939_sheet[f"{cols['Transmission Rate']}{n}"].value] = transmission_rate_ms
 
             J1939[J1939_sheet[f"{cols['PGN']}{n}"].value] = {
@@ -563,39 +563,47 @@ def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
         for spn, spn_spec in pgn_spec['SPNs'].items():
             spn_count += 1
 
-            start_byte, start_bit = map_spn_position(spn_spec['SPN Position in PGN'])
+            start_byte, start_bit = _map_spn_position(spn_spec['SPN Position in PGN'])
             spn_spec['start_byte'], spn_spec['start_bit'] = start_byte, start_bit
-            J1939_spn_positions_dict[spn_spec['SPN Position in PGN']] = {'start_byte': start_byte, 'start_bit': start_bit}
+            J1939_spn_positions_dict[spn_spec['SPN Position in PGN']] = {
+                'start_byte': start_byte, 'start_bit': start_bit
+            }
 
-            length_bits = map_spn_length(spn_spec['SPN Length'])
+            length_bits = _map_spn_length(spn_spec['SPN Length'])
             spn_spec['length_bits'] = length_bits
             J1939_spn_length_dict[spn_spec['SPN Length']] = length_bits
 
-            scale = map_resolution(spn_spec['Resolution'])
+            scale = _map_resolution(spn_spec['Resolution'])
             spn_spec['scale'] = scale
             J1939_resolution_dict[spn_spec['Resolution']] = scale
 
             spn_spec['n_decimals'] = len(str(scale).split('.')[-1]) if str(scale).count('.') else 0
 
-            offset = map_offset(spn_spec['Offset'])
+            offset = _map_offset(spn_spec['Offset'])
             spn_spec['offset'] = offset
             J1939_offset_dict[spn_spec['Offset']] = offset
 
-            min_value, max_value = map_data_range(spn_spec['Data Range'])
-            op_min_value, op_max_value = map_operational_range(spn_spec['Operational Range'])
+            min_value, max_value = _map_data_range(spn_spec['Data Range'])
+            op_min_value, op_max_value = _map_operational_range(spn_spec['Operational Range'])
             spn_spec['min_value'] = min_value if op_min_value is None else op_min_value
-            spn_spec['max_value'] = max_value if op_max_value is None else op_max_value
-            J1939_data_range_dict[spn_spec['Data Range']] = {'min_value': min_value, 'max_value': max_value}
-            J1939_operational_range_dict[spn_spec['Operational Range']] = {'min_value': op_min_value, 'max_value': op_max_value}
+            if length_bits == 32 and scale not in ['ASCII']:
+                spn_spec['max_value'] = 100_000 / scale
+            else:
+                spn_spec['max_value'] = max_value if op_max_value is None else op_max_value
 
-            unit = map_units(spn_spec['Units'])
+            J1939_data_range_dict[spn_spec['Data Range']] = {'min_value': min_value, 'max_value': max_value}
+            J1939_operational_range_dict[spn_spec['Operational Range']] = {
+                'min_value': op_min_value, 'max_value': op_max_value
+            }
+
+            unit = _map_units(spn_spec['Units'])
             spn_spec['unit'] = unit
             J1939_unit_dict[spn_spec['Units']] = unit
 
             if spn_spec['Units'] in ['bit', 'bit-mapped'] and spn not in ignore_discrete_value_spns:
-                value_label_dict = parse_discrete_value_label(spn, spn_spec['SPN Description'])
+                value_label_dict = _parse_discrete_value_label(spn, spn_spec['SPN Description'])
 
-                J1939_discrete_values_dict[spn] = {'scale': scale} | dict.fromkeys(range(2**spn_spec['length_bits']))
+                J1939_discrete_values_dict[spn] = {'scale': scale} | dict.fromkeys(range(2 ** spn_spec['length_bits']))
 
                 if spn in bit_mapped_spns:
                     spn_spec['scale'] = 'BIT_MAPPED'
@@ -616,7 +624,7 @@ def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
     save_json(J1939_dir/f'{base_filename}_transmission_rates.json', J1939_transmission_rates_dict)
     save_json(J1939_dir/f'{base_filename}_spn_positions.json', J1939_spn_positions_dict)
     save_json(J1939_dir/f'{base_filename}_spn_lengths.json', J1939_spn_length_dict)
-    save_json(J1939_dir/f'{base_filename}_.resolutionsjson', J1939_resolution_dict)
+    save_json(J1939_dir/f'{base_filename}_resolutions.json', J1939_resolution_dict)
     save_json(J1939_dir/f'{base_filename}_offsets.json', J1939_offset_dict)
     save_json(J1939_dir/f'{base_filename}_data_ranges.json', J1939_data_range_dict)
     save_json(J1939_dir/f'{base_filename}_operational_ranges.json', J1939_operational_range_dict)
@@ -627,4 +635,29 @@ def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
     with J1939_pkl.open('wb') as f:
         pickle.dump(J1939, f)
 
-    return f'Processed {pgn_count} PGNs and {spn_count} SPNs.'
+    return f'processed {pgn_count} PGNs and {spn_count} SPNs'
+
+def raw_min_value(*, signal_spec: dict):
+    min_value = encode(decoded_value=signal_spec['min_value'], offset=signal_spec['offset'], scale=signal_spec['scale'])
+    return min_value
+
+def raw_max_value(*, signal_spec: dict):
+    max_value = encode(decoded_value=signal_spec['max_value'], offset=signal_spec['offset'], scale=signal_spec['scale'])
+    return max_value
+
+def decode(*, raw_value, scale, offset):
+    return raw_value * scale + offset
+
+def encode(*, decoded_value, scale, offset):
+    return round((decoded_value - offset) / scale)
+
+def get_label(*, signal_spec: dict, value: int):
+    try:
+        return signal_spec['discrete_values'][value]
+    except KeyError:
+        return ''
+
+def get_label_value(*, signal_spec: dict, label: str):
+    for value, _label in signal_spec['discrete_values'].items():
+        if label == _label:
+            return value

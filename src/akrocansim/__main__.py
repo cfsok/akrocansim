@@ -1,3 +1,3 @@
 from . import gui
 
-gui.gui_main()
+gui.AkrocansimGui()
