@@ -1,7 +1,8 @@
-from pathlib import Path
+import webbrowser
 
 import dearpygui.dearpygui as dpg
 
+from .__init__ import __version__, __app_name__
 from .cannodes import Transmitter
 from .config import Config
 from . import J1939
@@ -10,6 +11,10 @@ VIEWPORT_WIDTH = 1500
 VIEWPORT_HEIGHT = 650
 WINDOW_WIDTH = VIEWPORT_WIDTH - 16
 
+
+def _hyperlink(text, address):
+    b = dpg.add_button(label=text, callback=lambda: webbrowser.open(address))
+    dpg.bind_item_theme(b, "__demo_hyperlinkTheme")
 
 class AkrocansimGui:
     def __init__(self):
@@ -21,7 +26,14 @@ class AkrocansimGui:
 
     def gui_main(self):
         dpg.create_context()
-        dpg.create_viewport(title='akro CAN simulator', width=VIEWPORT_WIDTH, height=VIEWPORT_HEIGHT, vsync=True)
+        dpg.create_viewport(title=__app_name__, width=VIEWPORT_WIDTH, height=VIEWPORT_HEIGHT, vsync=True)
+
+        with dpg.theme(tag="__demo_hyperlinkTheme"):
+            with dpg.theme_component(dpg.mvButton):
+                dpg.add_theme_color(dpg.mvThemeCol_Button, [0, 0, 0, 0])
+                dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, [0, 0, 0, 0])
+                dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, [29, 151, 236, 25])
+                dpg.add_theme_color(dpg.mvThemeCol_Text, [29, 151, 236])
 
         self.make_menu_bar()
         self.load_config()
@@ -88,9 +100,23 @@ class AkrocansimGui:
                 dpg.add_menu_item(tag='J1939_parse', label='Parse J1939 Digital Annex', callback=self.parse_J1939DA)
                 dpg.add_menu_item(tag='config_load', label='Load configuration', callback=self.load_config)
             with dpg.menu(label='Help'):
-                dpg.add_menu_item(label='About')
+                dpg.add_menu_item(label='About', callback=self.make_about_window)
             dpg.add_text('  |  ')
             dpg.add_text(tag='status_bar')
+
+    def make_about_window(self):
+        with dpg.window(label=f'About {__app_name__}', pos=(200, 100), modal=True, no_resize=True, no_move=True):
+            dpg.add_text('akrocansim\n'
+                         f'Version {__version__}\n'
+                         'Copyright 2023 Socrates Vlassis\n\n')
+            _hyperlink('Homepage (PyPI)', 'https://pypi.org/project/akrocansim/')
+            dpg.add_spacer(height=20)
+            dpg.add_separator()
+            dpg.add_spacer(height=20)
+            dpg.add_text('akrocansim is make possible by the following open source projects:\n')
+            _hyperlink('python-can', 'https://github.com/hardbyte/python-can')
+            _hyperlink('DearPyGUI', 'https://github.com/hoffstadt/DearPyGui')
+            _hyperlink('openpyxl', 'https://openpyxl.readthedocs.io/')
 
     def load_config(self):
         status_message, error_messages = self.config.load()
