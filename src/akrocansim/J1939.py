@@ -25,13 +25,13 @@ def _map_transmission_rate(rate):
             case 'When active: 20 ms; else 200 ms':
                 tx_rate_ms = 20
             case '100 ms':
-                tx_rate_ms = 10
+                tx_rate_ms = 100
             case 'Manufacturer defined, not faster than 20 ms':
                 tx_rate_ms = 50
             case 'Every 100 ms and on change but no faster than 20 ms':
                 tx_rate_ms = 100
             case 'Every 50ms and if SPN 5681 \"Driver activation demand for Advanced Emergency Braking System\" has changed but no faster than every 10 ms':
-                tx_rate_ms = 500
+                tx_rate_ms = 50
             case '50 ms':
                 tx_rate_ms = 50
             case '20 ms':
