@@ -36,15 +36,14 @@ pip install akrocansim
 - A hardware CAN interface supported by python-can,
 see https://python-can.readthedocs.io/en/v4.3.1/interfaces.html.
 - A version of J1939 Digital Annex (J1939DA) from SAE International, see https://www.sae.org/standards/?search=j1939DA.
-- A way to reliably convert `.xls` to `.xlsx` if your copy of the J1939DA is in `.xls` format
-(Microsoft Excel obviously works, but I am not sure of third party tool).
+- A way to convert `.xls` to `.xlsx` if your copy of the J1939DA is in `.xls` format.
 
 ## Usage
 ```
 python -m akrocansim
 ```
 
-Upon initial run, an `akrocansim` folder is created in your home folder hosting a starting configuration file.
+Upon initial run, a folder named `akrocansim` is created in your home folder hosting a starting configuration file.
 
 Follow the instructions on the application and in the configuration file for next steps.
 
