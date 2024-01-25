@@ -1,4 +1,4 @@
-# SPN that still need handling: 7585, 6973, 6317(check), 3192, 5433(check), 900, 899, 927, 7716, 2928, 5677(check), 5678(check), 7750
+# SPN that still need handling: 7585, 6973, 3192, 900, 899, 927, 7716, 2928
 # SPN 584, 585 are not handled correctly - 2**32 max value not supported
 # spn for lat, long max,scale problem
 # all bit mapped SPNs need GUI support
@@ -10,7 +10,7 @@ from openpyxl import load_workbook
 
 
 bit_mapped_spns = [3344, 3345, 3346, 3347, 3348]
-ignore_discrete_value_spns = [4180, 4181]
+ignore_discrete_value_spns = [4180, 4181, 7750, 7757]
 
 
 def _map_transmission_rate(rate):
@@ -456,9 +456,10 @@ def _map_units(unit):
                 _unit = unit
     return _unit
 
+last_checked_reached = False
 def _parse_discrete_value_label(spn, spn_description):
-    last_checked = 'xxx'#7750
-    last_checked_reached = False
+    last_checked = 7954 #'xxx'
+    global last_checked_reached
     if spn == last_checked:
         last_checked_reached = True
     if last_checked_reached:
