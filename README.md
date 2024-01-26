@@ -1,8 +1,11 @@
 # akrocansim
 A CAN bus J1939 controller simulator.
 
-[![Downloads](https://static.pepy.tech/badge/akrocansim)](https://pepy.tech/project/akrocansim)
-[![Downloads](https://static.pepy.tech/badge/akrocansim/month)](https://pepy.tech/project/akrocansim)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/akrocansim)](https://github.com/cfsok/akrocansim)
+[![PyPI - Version](https://img.shields.io/pypi/v/akrocansim?color=blue)](https://pypi.org/project/akrocansim/)
+![Pepy Total Downlods](https://img.shields.io/pepy/dt/akrocansim)
+![PyPI - License](https://img.shields.io/pypi/l/akrocansim)
+
 
 ## Built with
 - [python-can](https://github.com/hardbyte/python-can)
