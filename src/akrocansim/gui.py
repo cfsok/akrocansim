@@ -100,6 +100,10 @@ class AkrocansimGui:
                 dpg.add_menu_item(tag='J1939_parse', label='Parse J1939 Digital Annex', callback=self.parse_J1939DA)
                 dpg.add_menu_item(tag='config_load', label='Load configuration', callback=self.load_config)
             with dpg.menu(label='Help'):
+                dpg.add_menu_item(label='Talk to us',
+                                  callback=lambda: webbrowser.open('https://github.com/cfsok/akrocansim/discussions'))
+                dpg.add_menu_item(label='Report a problem',
+                                  callback=lambda: webbrowser.open('https://github.com/cfsok/akrocansim/issues'))
                 dpg.add_menu_item(label='About', callback=self.make_about_window)
             dpg.add_text('  |  ')
             dpg.add_text(tag='status_bar')
