@@ -128,7 +128,7 @@ class Config:
                                                   ' not found in [CAN_INTERFACE] section')
                         else:
                             try:
-                                self.bus = can.thread_safe_bus.Bus(**self._config['CAN_INTERFACE'])
+                                self.bus = can.Bus(**self._config['CAN_INTERFACE'])
                             except can.exceptions.CanError as e:
                                 status_message = 'incorrect or incomplete configuration'
                                 error_messages.append(f'CAN INTERFACE ERROR: {e}')

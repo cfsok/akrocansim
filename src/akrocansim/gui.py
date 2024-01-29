@@ -160,7 +160,6 @@ class AkrocansimGui:
         with dpg.window(label=self.config.bus.channel_info, width=WINDOW_WIDTH, no_close=True):
             with dpg.group(horizontal=True):
                 dpg.add_text('Continuous J1939 PGN transmission:')
-                dpg.add_radio_button(tag='mode', items=('Stop All', 'Tx All', 'Use PGN Settings'),
                                      default_value='Stop All', horizontal=True)
             dpg.add_button(label='Tx All PGNs Once', user_data='all PGNs', callback=self.transmitter.add_pending_tx)
 
