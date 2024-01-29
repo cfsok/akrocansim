@@ -3,7 +3,7 @@ import webbrowser
 import dearpygui.dearpygui as dpg
 
 from .__init__ import __version__, __app_name__
-from .cannodes import Transmitter
+from .transmitter import Transmitter
 from .config import Config
 from . import J1939
 
@@ -40,53 +40,7 @@ class AkrocansimGui:
 
         dpg.setup_dearpygui()
         dpg.show_viewport()
-        #dpg.start_dearpygui()
-        while dpg.is_dearpygui_running():
-            if self.J1939 is not None:
-                for pgn, spns in self.config.tx_PGNs_SPNs.items():
-                    for spn in spns:
-                        raw_value = dpg.get_value(str(spn))
-                        signal_spec = self.J1939[pgn]['SPNs'][spn]
-
-                        if signal_spec['scale'] == 'ENUM':
-                            pass
-                        else:
-                            decoded_value = J1939.decode(raw_value=raw_value,
-                                                         scale=signal_spec['scale'],
-                                                         offset=signal_spec['offset'])
-                            # :4.{len(str(J1939[pgn]['SPNs'][spn]['scale']).split('.')[1])}f
-                            dpg.set_value(f'{pgn}_{spn}_input', decoded_value)
-                            # dpg.set_item_user_data(f'{pgn}_{spn}_input', decoded_value)
-
-                        match signal_spec['length_bits'], signal_spec['scale']:
-                            case 1 | 2 | 3 | 4 as length_bits, 'ENUM':
-                                nibble = f'{raw_value:X}'
-                                dpg.set_value(f'{spn}_bin', f"{raw_value:0{length_bits}b}".ljust(10))
-                                dpg.set_value(f'{spn}_hex', f'    [{nibble}]            ')
-                            case 5 | 6 | 7 | 8 as length_bits, 'ENUM':
-                                byte = f'{raw_value:02X}'
-                                dpg.set_value(f'{spn}_bin', f"{raw_value:0{length_bits}b}".ljust(10))
-                                dpg.set_value(f'{spn}_hex', f'   [{byte}]            ')
-                            case 1 | 2 | 3 | 4, scale if scale not in ['ENUM']:
-                                nimble = f'{raw_value:X}'
-                                dpg.set_value(f'{spn}_hex', f'   [{nimble}]             ')
-                            case 5 | 6 | 7 | 8, scale if scale not in ['ENUM']:
-                                byte = f'{raw_value:02X}'
-                                dpg.set_value(f'{spn}_hex', f'   [{byte}]            ')
-                            case 16, _:
-                                all_bytes = f'{raw_value:04X}'
-                                byte1 = all_bytes[2:4]
-                                byte2 = all_bytes[0:2]
-                                dpg.set_value(f'{spn}_hex', f'LSB[{byte1} {byte2}]MSB      ')
-                            case 32, _:
-                                all_bytes = f'{raw_value:08X}'
-                                byte1 = all_bytes[6:8]
-                                byte2 = all_bytes[4:6]
-                                byte3 = all_bytes[2:4]
-                                byte4 = all_bytes[0:2]
-                                dpg.set_value(f'{spn}_hex', f'LSB[{byte1} {byte2} {byte3} {byte4}]MSB')
-
-            dpg.render_dearpygui_frame()
+        dpg.start_dearpygui()
 
         dpg.destroy_context()
         if self.config.bus is not None:
@@ -160,8 +114,25 @@ class AkrocansimGui:
         with dpg.window(label=self.config.bus.channel_info, width=WINDOW_WIDTH, no_close=True):
             with dpg.group(horizontal=True):
                 dpg.add_text('Continuous J1939 PGN transmission:')
-                                     default_value='Stop All', horizontal=True)
-            dpg.add_button(label='Tx All PGNs Once', user_data='all PGNs', callback=self.transmitter.add_pending_tx)
+                dpg.add_radio_button(tag='global_tx_mode', items=('Stop All', 'Tx All', 'Use PGN Settings'),
+                                     default_value='Stop All', horizontal=True,
+                                     callback=self.global_tx_mode_changed)
+            dpg.add_button(tag='global_tx_once', label='Tx All PGNs Once', callback=self.global_tx_once_invoked)
+
+    def global_tx_mode_changed(self, sender, tx_mode, user_data):
+        match tx_mode:
+            case 'Stop All':
+                dpg.show_item('global_tx_once')
+                self.transmitter.set_tx_mode_stop()
+            case 'Tx All':
+                dpg.hide_item('global_tx_once')
+                self.transmitter.set_tx_mode_continuous()
+            case 'Use PGN Settings':
+                dpg.show_item('global_tx_once')
+                self.transmitter.set_tx_mode_per_PGN()
+
+    def global_tx_once_invoked(self, sender, app_data, user_data):
+        self.transmitter.set_tx_once()
 
     def make_J1939_window(self):
         with dpg.window(tag='J1939_window', label='J1939', width=WINDOW_WIDTH, pos=(0, 119), height=500, no_close=True):
@@ -171,6 +142,8 @@ class AkrocansimGui:
     def add_pgn(self, pgn, spns: list):
         priority = self.J1939[pgn]['Default Priority']
         source_address = 0
+        self.transmitter.register_tx_PGN(pgn=pgn, priority=priority, source_address=source_address,
+                                         tx_rate_ms=self.J1939[pgn]['transmission_rate_ms'])
 
         pgn_label = (f"PGN {pgn} - CAN ID: {priority << 26 | pgn << 8 | source_address:08X} "
                      f"- {self.J1939[pgn]['Acronym']} - {self.J1939[pgn]['Parameter Group Label']}")
@@ -189,7 +162,7 @@ class AkrocansimGui:
             if continuous_signals_present:
                 with dpg.table(header_row=True, resizable=True,
                                borders_outerV=True, borders_outerH=True, borders_innerH=True, borders_innerV=True):
-                    dpg.add_table_column(label='SIGNAL', width_fixed=True)
+                    dpg.add_table_column(label='REAL VALUE', width_fixed=True)
                     dpg.add_table_column(label='UNIT', width_fixed=True)
                     dpg.add_table_column(label='RAW HEX', width_fixed=True)
                     dpg.add_table_column(label='RAW DECIMAL')
@@ -202,19 +175,25 @@ class AkrocansimGui:
                                 max_value = (2 ** spn_spec['length_bits'] - 1) * spn_spec['scale'] + spn_spec['offset']
                                 if type(spn_spec['scale']) is int:
                                     dpg.add_input_int(tag=f'{pgn}_{spn}_input', width=140,
+                                                      user_data=(pgn, spn, spn_spec),
+                                                      default_value=spn_spec['min_value'],
                                                       min_value=spn_spec['offset'],
                                                       max_value=max_value,
                                                       min_clamped=True, max_clamped=True,
                                                       step=spn_spec['scale'],
-                                                      callback=self.set_spn_value, on_enter=True)
+                                                      callback=self.continuous_spn_input_int_changed,
+                                                      on_enter=True)
                                 elif type(spn_spec['scale']) is float:
                                     dpg.add_input_float(tag=f'{pgn}_{spn}_input', width=140,
+                                                        user_data=(pgn, spn, spn_spec),
                                                         format=f"%.{spn_spec['n_decimals']}f",
+                                                        default_value=spn_spec['min_value'],
                                                         min_value=spn_spec['offset'],
                                                         max_value=max_value,
                                                         min_clamped=True, max_clamped=True,
                                                         step=spn_spec['scale'],
-                                                        callback=self.set_spn_value, on_enter=True)
+                                                        callback=self.continuous_spn_input_int_changed,
+                                                        on_enter=True)
                                 else:
                                     raise TypeError
 
@@ -226,11 +205,14 @@ class AkrocansimGui:
                                 dpg.add_text(tag=f'{spn}_hex')
 
                                 # RAW DECIMAL
-                                dpg.add_slider_int(tag=str(spn), user_data=pgn,
+                                min_value = J1939.raw_min_value(signal_spec=spn_spec)
+                                dpg.add_slider_int(tag=str(spn), user_data=(pgn, spn, spn_spec),
                                                    label=f"SPN {spn}: {spn_spec['SPN Name']}",
-                                                   min_value=J1939.raw_min_value(signal_spec=spn_spec),
+                                                   min_value=min_value,
                                                    max_value=J1939.raw_max_value(signal_spec=spn_spec),
-                                                   default_value=J1939.raw_min_value(signal_spec=spn_spec))
+                                                   default_value=J1939.raw_min_value(signal_spec=spn_spec),
+                                                   callback=self.continuous_spn_slider_changed)
+                            self.continuous_spn_slider_changed(str(spn), min_value, (pgn, spn, spn_spec))
 
             if enum_signals_present:
                 with dpg.table(header_row=True, resizable=True,
@@ -245,10 +227,11 @@ class AkrocansimGui:
                         if spn_spec['scale'] == 'ENUM':
                             with dpg.table_row():
                                 # DECIMAL
-                                dpg.add_input_int(tag=str(spn), width=140, user_data=pgn,
+                                dpg.add_input_int(tag=str(spn), width=140, user_data=(pgn, spn, spn_spec),
                                                   min_value=0, max_value=2 ** spn_spec['length_bits'] - 1,
                                                   min_clamped=True, max_clamped=True,
-                                                  callback=self.set_spn_label, on_enter=True)
+                                                  callback=self.discrete_spn_input_int_changed,
+                                                  on_enter=True)
 
                                 # BINARY
                                 dpg.add_text(tag=f'{spn}_bin')
@@ -258,31 +241,79 @@ class AkrocansimGui:
 
                                 # OPTIONS
                                 labels = [label for label in spn_spec['discrete_values'].values()]
-                                dpg.add_combo(tag=f'{pgn}_{spn}_combo', items=labels,
+                                dpg.add_combo(tag=f'{pgn}_{spn}_combo', items=labels, user_data=(pgn, spn, spn_spec),
                                               default_value=J1939.get_label(signal_spec=spn_spec, value=0),
                                               label=f"SPN {spn}: {spn_spec['SPN Name']}",
-                                              callback=self.set_spn_value)
+                                              callback=self.discrete_spn_combo_changed)
+                            self.discrete_spn_input_int_changed(str(spn), 0, (pgn, spn, spn_spec))
 
             with dpg.group(horizontal=True):
                 dpg.add_text('Tx mode:')
-                dpg.add_checkbox(tag=f'{pgn} continuous tx', label='Continuous')
-                dpg.add_button(label='Tx Once', user_data=pgn, callback=self.transmitter.add_pending_tx)
+                dpg.add_checkbox(tag=f'{pgn}_tx_mode', label='Continuous',
+                                 user_data=pgn, callback=self.pgn_tx_mode_changed)
+                dpg.add_spacer(width=10)
+                dpg.add_input_int(label='ms', default_value=self.J1939[pgn]['transmission_rate_ms'],
+                                  min_value=10, max_value=50000, min_clamped=True, max_clamped=True,
+                                  step=10, step_fast=100, width=90,
+                                  user_data=pgn, callback=self.pgn_tx_rate_changed)
+                dpg.add_spacer(width=10)
+                dpg.add_button(tag=f'{pgn}_tx_once', label='Tx Once',
+                               user_data=pgn, callback=self.pgn_tx_once_invoked)
 
             dpg.add_spacer(height=10)
 
-        self.transmitter.register_tx_PGN(pgn=pgn, priority=priority, source_address=source_address,
-                                         tx_rate_ms=self.J1939[pgn]['transmission_rate_ms'],
-                                         spns=spns, get_data_callback=dpg.get_value)
+    def pgn_tx_mode_changed(self, sender, cont_tx, pgn):
+        if cont_tx:
+            dpg.hide_item(f'{pgn}_tx_once')
+            self.transmitter.set_tx_mode_continuous(pgn)
+        else:
+            dpg.show_item(f'{pgn}_tx_once')
+            self.transmitter.set_tx_mode_stop(pgn)
 
-    def set_spn_value(self, sender, new_value, old_value):
-        pgn, spn, sender_type = sender.split('_')
-        spn_spec = self.J1939[int(pgn)]['SPNs'][int(spn)]
-        if sender_type == 'input':
-            dpg.set_value(str(spn), J1939.encode(decoded_value=new_value,
-                                                 scale=spn_spec['scale'],
-                                                 offset=spn_spec['offset']))
-        elif sender_type == 'combo':
-            dpg.set_value(str(spn), J1939.get_label_value(signal_spec=spn_spec, label=new_value))
+    def pgn_tx_once_invoked(self, sender, app_data, pgn):
+        self.transmitter.set_tx_once(pgn)
+
+    def pgn_tx_rate_changed(self, sender, tx_rate_ms, pgn):
+        self.transmitter.modify_pgn_tx_rate(pgn, tx_rate_ms)
+
+    def continuous_spn_slider_changed(self, sender, raw_value, pgn__spn__spn_spec):
+        pgn, spn, signal_spec = pgn__spn__spn_spec
+        self.transmitter.modify_pgn_data(pgn, spn, raw_value)
+
+        decoded_value = J1939.decode(raw_value=raw_value,
+                                     scale=signal_spec['scale'],
+                                     offset=signal_spec['offset'])
+        # :4.{len(str(J1939[pgn]['SPNs'][spn]['scale']).split('.')[1])}f
+        dpg.set_value(f'{pgn}_{spn}_input', decoded_value)
+        # dpg.set_item_user_data(f'{pgn}_{spn}_input', decoded_value)
+
+        match signal_spec['length_bits']:
+            case 1 | 2 | 3 | 4:
+                nimble = f'{raw_value:X}'
+                dpg.set_value(f'{spn}_hex', f'   [{nimble}]             ')
+            case 5 | 6 | 7 | 8:
+                byte = f'{raw_value:02X}'
+                dpg.set_value(f'{spn}_hex', f'   [{byte}]            ')
+            case 16:
+                all_bytes = f'{raw_value:04X}'
+                byte1 = all_bytes[2:4]
+                byte2 = all_bytes[0:2]
+                dpg.set_value(f'{spn}_hex', f'LSB[{byte1} {byte2}]MSB      ')
+            case 32:
+                all_bytes = f'{raw_value:08X}'
+                byte1 = all_bytes[6:8]
+                byte2 = all_bytes[4:6]
+                byte3 = all_bytes[2:4]
+                byte4 = all_bytes[0:2]
+                dpg.set_value(f'{spn}_hex', f'LSB[{byte1} {byte2} {byte3} {byte4}]MSB')
+
+    def continuous_spn_input_int_changed(self, sender, real_value, pgn__spn__spn_spec):
+        pgn, spn, spn_spec = pgn__spn__spn_spec
+        raw_value = J1939.encode(decoded_value=real_value, scale=spn_spec['scale'], offset=spn_spec['offset'])
+        slider_tag = str(spn)
+        dpg.set_value(slider_tag, raw_value)
+        self.continuous_spn_slider_changed(slider_tag, raw_value, pgn__spn__spn_spec)
+
         #if new_value > old_value:
         #    ...
         #else:
@@ -290,6 +321,24 @@ class AkrocansimGui:
         #    dpg.set_value(spn, dpg.get_value(spn) - 1)
         #    dpg.set_item_user_data(sender, new_value)
 
-    def set_spn_label(self, spn, new_value, pgn):
-        spn_spec = self.J1939[int(pgn)]['SPNs'][int(spn)]
-        dpg.set_value(f'{pgn}_{spn}_combo', J1939.get_label(signal_spec=spn_spec, value=new_value))
+    def discrete_spn_input_int_changed(self, sender, raw_value, pgn__spn__spn_spec):
+        pgn, spn, signal_spec = pgn__spn__spn_spec
+        self.transmitter.modify_pgn_data(pgn, spn, raw_value)
+        dpg.set_value(f'{pgn}_{spn}_combo', J1939.get_label(signal_spec=signal_spec, value=raw_value))
+
+        match signal_spec['length_bits']:
+            case 1 | 2 | 3 | 4 as length_bits:
+                nibble = f'{raw_value:X}'
+                dpg.set_value(f'{spn}_bin', f"{raw_value:0{length_bits}b}".ljust(10))
+                dpg.set_value(f'{spn}_hex', f'    [{nibble}]            ')
+            case 5 | 6 | 7 | 8 as length_bits:
+                byte = f'{raw_value:02X}'
+                dpg.set_value(f'{spn}_bin', f"{raw_value:0{length_bits}b}".ljust(10))
+                dpg.set_value(f'{spn}_hex', f'   [{byte}]            ')
+
+    def discrete_spn_combo_changed(self, sender, real_value, pgn__spn__spn_spec):
+        pgn, spn, spn_spec = pgn__spn__spn_spec
+        raw_value = J1939.get_label_value(signal_spec=spn_spec, label=real_value)
+        input_int_widget = str(spn)
+        dpg.set_value(input_int_widget, raw_value)
+        self.discrete_spn_input_int_changed(input_int_widget, raw_value, pgn__spn__spn_spec)
