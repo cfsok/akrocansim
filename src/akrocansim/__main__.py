@@ -1,3 +1,3 @@
-from akrocansim import gui
+from . import gui
 
 gui.AkrocansimGui()
