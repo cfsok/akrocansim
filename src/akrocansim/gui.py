@@ -7,6 +7,7 @@ from .__init__ import __version__, __app_name__
 from .transmitter import Transmitter
 from .config import Config
 from . import J1939
+from . import version_check
 
 VIEWPORT_WIDTH = 1500
 VIEWPORT_HEIGHT = 650
@@ -74,9 +75,9 @@ class AkrocansimGui:
         with dpg.window(label=f'About {__app_name__}', pos=(200, 100), modal=True, no_resize=True, no_move=True, autosize=True):
             with dpg.group(horizontal=True):
                 with dpg.group():
-                    dpg.add_text('\n\n\n\n\nakrocansim\n'
-                                 f'Version {__version__}\n'
-                                 'Copyright 2023 Socrates Vlassis\n\n')
+                    dpg.add_text('\n\n\n\n\nakrocansim\n')
+                    dpg.add_text(f'Version {__version__} ({version_check.is_latest()})\n')
+                    dpg.add_text('Copyright 2023 Socrates Vlassis\n\n')
                     _hyperlink('Homepage (PyPI)', 'https://pypi.org/project/akrocansim/')
                 dpg.add_spacer(width=20)
                 dpg.add_image('logo')
