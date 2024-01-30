@@ -1,4 +1,5 @@
 import webbrowser
+import os
 
 import dearpygui.dearpygui as dpg
 
@@ -26,7 +27,9 @@ class AkrocansimGui:
 
     def gui_main(self):
         dpg.create_context()
-        dpg.create_viewport(title=__app_name__, width=VIEWPORT_WIDTH, height=VIEWPORT_HEIGHT, vsync=True)
+        icon = os.path.join(os.path.dirname(__file__), 'resources', 'akrocansim.ico')
+        dpg.create_viewport(title=__app_name__, width=VIEWPORT_WIDTH, height=VIEWPORT_HEIGHT, vsync=True,
+                            small_icon=icon, large_icon=icon)
 
         with dpg.theme(tag="__demo_hyperlinkTheme"):
             with dpg.theme_component(dpg.mvButton):
@@ -34,6 +37,11 @@ class AkrocansimGui:
                 dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, [0, 0, 0, 0])
                 dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, [29, 151, 236, 25])
                 dpg.add_theme_color(dpg.mvThemeCol_Text, [29, 151, 236])
+
+        logo = os.path.join(os.path.dirname(__file__), 'resources', 'akrocansim_logo_dark.png')
+        logo_width, logo_height, logo_channels, logo_data = dpg.load_image(logo)
+        with dpg.texture_registry():
+            dpg.add_static_texture(logo_width, logo_height, logo_data, tag='logo')
 
         self.make_menu_bar()
         self.load_config()
@@ -63,17 +71,20 @@ class AkrocansimGui:
             dpg.add_text(tag='status_bar')
 
     def make_about_window(self):
-        with dpg.window(label=f'About {__app_name__}', pos=(200, 100), modal=True, no_resize=True, no_move=True):
-            dpg.add_text('akrocansim\n'
-                         f'Version {__version__}\n'
-                         'Copyright 2023 Socrates Vlassis\n\n')
-            _hyperlink('Homepage (PyPI)', 'https://pypi.org/project/akrocansim/')
-            dpg.add_spacer(height=20)
+        with dpg.window(label=f'About {__app_name__}', pos=(200, 100), modal=True, no_resize=True, no_move=True, autosize=True):
+            with dpg.group(horizontal=True):
+                with dpg.group():
+                    dpg.add_text('\n\n\n\n\nakrocansim\n'
+                                 f'Version {__version__}\n'
+                                 'Copyright 2023 Socrates Vlassis\n\n')
+                    _hyperlink('Homepage (PyPI)', 'https://pypi.org/project/akrocansim/')
+                dpg.add_spacer(width=20)
+                dpg.add_image('logo')
             dpg.add_separator()
             dpg.add_spacer(height=20)
             dpg.add_text('akrocansim is make possible by the following open source projects:\n')
             _hyperlink('python-can', 'https://github.com/hardbyte/python-can')
-            _hyperlink('DearPyGUI', 'https://github.com/hoffstadt/DearPyGui')
+            _hyperlink('DearPyGui', 'https://github.com/hoffstadt/DearPyGui')
             _hyperlink('openpyxl', 'https://openpyxl.readthedocs.io/')
 
     def load_config(self):
@@ -111,7 +122,7 @@ class AkrocansimGui:
         dpg.set_value(item='config_messages', value=error_text)
 
     def make_PGN_global_tx_management_window(self):  # put user_data='all PGNs' to tag
-        with dpg.window(label=self.config.bus.channel_info, width=WINDOW_WIDTH, no_close=True):
+        with dpg.window(label=self.config.bus.channel_info, width=570, no_close=True):
             with dpg.group(horizontal=True):
                 dpg.add_text('Continuous J1939 PGN transmission:')
                 dpg.add_radio_button(tag='global_tx_mode', items=('Stop All', 'Tx All', 'Use PGN Settings'),
