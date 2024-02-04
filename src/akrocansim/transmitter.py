@@ -2,6 +2,7 @@ import threading
 import time
 import can
 
+
 _TX_MODE = 0
 _TX_MODE__STOP = 0  # global, local
 _TX_MODE__TX_CONT = 1  # global, local
@@ -12,9 +13,9 @@ _DATA = 2
 
 
 class Transmitter:
-    def __init__(self, J1939: dict, bus: can.BusABC):
+    def __init__(self, J1939: dict):
         self._J1939 = J1939
-        self._bus = bus
+        self.bus: can.BusABC = None
         self.PGNs_pending_tx = {}
 
         self.global_tx_mode = _TX_MODE__STOP  # _TX_MODE__STOP, _TX_MODE__TX_CONT, _TX_MODE__PER_PGN
@@ -50,7 +51,12 @@ class Transmitter:
             else:
                 continue
 
-            self._bus.send(can.Message(arbitration_id=can_id, is_extended_id=is_extended, data=signal_spec[_DATA]))
+            if self.bus is not None:
+                try:
+                    self.bus.send(can.Message(arbitration_id=can_id, is_extended_id=is_extended,
+                                              data=signal_spec[_DATA]))
+                except can.CanOperationError:
+                    pass
 
     def set_tx_mode_stop(self, pgn=None):
         if pgn is None:
@@ -102,4 +108,4 @@ class Transmitter:
                 data[start_byte + 2] = raw_value >> 16 & 0x00FF
                 data[start_byte + 3] = raw_value >> 24
 
-        self.tx_CAN_IDs[self.J1939_CAN_IDs[pgn]][_DATA] = data
+        self.tx_CAN_IDs[self.J1939_CAN_IDs[pgn]][_DATA] = bytearray(data)

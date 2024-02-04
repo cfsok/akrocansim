@@ -458,7 +458,7 @@ def _map_units(unit):
 
 last_checked_reached = False
 def _parse_discrete_value_label(spn, spn_description):
-    last_checked = 7954 #'xxx'
+    last_checked = 'xxx' #7954
     global last_checked_reached
     if spn == last_checked:
         last_checked_reached = True
@@ -470,10 +470,7 @@ def _parse_discrete_value_label(spn, spn_description):
 
     is_decimal = False
     for line in spn_description.splitlines():
-        line = (line
-                .lstrip()
-                .removeprefix('13 preprogrammed')
-                .removesuffix('_x000D_'))
+        line = line.lstrip().removeprefix('13 preprogrammed')
 
         value = None
         val = line.split(' ', 1)[0].split('-', 1)[0].split('…', 1)[0].split('..', 1)[0]
@@ -506,8 +503,8 @@ def _parse_discrete_value_label(spn, spn_description):
 
     return value_label_dict
 
-def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
-    J1939_file = J1939_dir/J1939DA_config['filename']
+def parse_J1939DA(*, J1939DA_config: dict, J1939DA_dir: Path, J1939DA_pickle: Path) -> str:
+    J1939_file = J1939DA_dir / J1939DA_config['filename']
     J1939_wb = load_workbook(filename=J1939_file)
     J1939_sheet = J1939_wb[J1939DA_config['SPNs_and_PGNs_sheet']]
     spn_rows = J1939DA_config['SPNs_to_parse']
@@ -529,13 +526,18 @@ def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
         try:
             _ = J1939[J1939_sheet[f"{cols['PGN']}{n}"].value]
         except KeyError:
+
+            pgn_description = J1939_sheet[f"{cols['PGN Description']}{n}"].value
+            if pgn_description is not None:
+                pgn_description = pgn_description.replace('_x000D_', '')
+
             transmission_rate_ms = _map_transmission_rate(J1939_sheet[f"{cols['Transmission Rate']}{n}"].value)
             J1939_transmission_rates_dict[J1939_sheet[f"{cols['Transmission Rate']}{n}"].value] = transmission_rate_ms
 
             J1939[J1939_sheet[f"{cols['PGN']}{n}"].value] = {
                 'Parameter Group Label': J1939_sheet[f"{cols['Parameter Group Label']}{n}"].value,
                 'Acronym': J1939_sheet[f"{cols['Acronym']}{n}"].value,
-                'PGN Description': J1939_sheet[f"{cols['PGN Description']}{n}"].value,
+                'PGN Description': pgn_description,
                 'PGN Data Length': J1939_sheet[f"{cols['PGN Data Length']}{n}"].value \
                     if J1939_sheet[f"{cols['PGN Data Length']}{n}"].value != 'Variable' else 8,
                 'Default Priority': J1939_sheet[f"{cols['Default Priority']}{n}"].value,
@@ -545,9 +547,14 @@ def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
             }
 
     for n in range(spn_rows['first_row'], spn_rows['last_row'] + 1):
+
+        spn_description = J1939_sheet[f"{cols['SPN Description']}{n}"].value
+        if spn_description is not None:
+            spn_description = spn_description.replace('_x000D_', '')
+
         J1939[J1939_sheet[f"{cols['PGN']}{n}"].value]['SPNs'][J1939_sheet[f"{cols['SPN']}{n}"].value] = {
             'SPN Name': J1939_sheet[f"{cols['SPN Name']}{n}"].value,
-            'SPN Description': J1939_sheet[f"{cols['SPN Description']}{n}"].value,
+            'SPN Description': spn_description,
             'SPN Position in PGN': J1939_sheet[f"{cols['SPN Position in PGN']}{n}"].value,
             'SPN Length': J1939_sheet[f"{cols['SPN Length']}{n}"].value,
             'Resolution': J1939_sheet[f"{cols['Resolution']}{n}"].value,
@@ -620,45 +627,20 @@ def parse_J1939DA(*, J1939_dir: Path, J1939DA_config: dict) -> str:
     def save_json(file: Path, J1939_dict: dict):
         with file.open('w', encoding='utf-8') as f:
             json.dump(J1939_dict, f, indent=4, ensure_ascii=False)
-    base_filename = J1939DA_config['filename'].removesuffix('.xlsx')
-    save_json(J1939_dir/f'{base_filename}.json', J1939)
-    save_json(J1939_dir/f'{base_filename}_transmission_rates.json', J1939_transmission_rates_dict)
-    save_json(J1939_dir/f'{base_filename}_spn_positions.json', J1939_spn_positions_dict)
-    save_json(J1939_dir/f'{base_filename}_spn_lengths.json', J1939_spn_length_dict)
-    save_json(J1939_dir/f'{base_filename}_resolutions.json', J1939_resolution_dict)
-    save_json(J1939_dir/f'{base_filename}_offsets.json', J1939_offset_dict)
-    save_json(J1939_dir/f'{base_filename}_data_ranges.json', J1939_data_range_dict)
-    save_json(J1939_dir/f'{base_filename}_operational_ranges.json', J1939_operational_range_dict)
-    save_json(J1939_dir/f'{base_filename}_units.json', J1939_unit_dict)
-    save_json(J1939_dir/f'{base_filename}_discrete_values.json', J1939_discrete_values_dict)
 
-    J1939_pkl = J1939_dir/'J1939.pkl'
-    with J1939_pkl.open('wb') as f:
+    base_filename = J1939DA_config['filename'].removesuffix('.xlsx')
+    save_json(J1939DA_dir / f'{base_filename}.json', J1939)
+    save_json(J1939DA_dir / f'{base_filename}_transmission_rates.json', J1939_transmission_rates_dict)
+    save_json(J1939DA_dir / f'{base_filename}_spn_positions.json', J1939_spn_positions_dict)
+    save_json(J1939DA_dir / f'{base_filename}_spn_lengths.json', J1939_spn_length_dict)
+    save_json(J1939DA_dir / f'{base_filename}_resolutions.json', J1939_resolution_dict)
+    save_json(J1939DA_dir / f'{base_filename}_offsets.json', J1939_offset_dict)
+    save_json(J1939DA_dir / f'{base_filename}_data_ranges.json', J1939_data_range_dict)
+    save_json(J1939DA_dir / f'{base_filename}_operational_ranges.json', J1939_operational_range_dict)
+    save_json(J1939DA_dir / f'{base_filename}_units.json', J1939_unit_dict)
+    save_json(J1939DA_dir / f'{base_filename}_discrete_values.json', J1939_discrete_values_dict)
+
+    with J1939DA_pickle.open('wb') as f:
         pickle.dump(J1939, f)
 
     return f'processed {pgn_count} PGNs and {spn_count} SPNs'
-
-def raw_min_value(*, signal_spec: dict):
-    min_value = encode(decoded_value=signal_spec['min_value'], offset=signal_spec['offset'], scale=signal_spec['scale'])
-    return min_value
-
-def raw_max_value(*, signal_spec: dict):
-    max_value = encode(decoded_value=signal_spec['max_value'], offset=signal_spec['offset'], scale=signal_spec['scale'])
-    return max_value
-
-def decode(*, raw_value, scale, offset):
-    return raw_value * scale + offset
-
-def encode(*, decoded_value, scale, offset):
-    return round((decoded_value - offset) / scale)
-
-def get_label(*, signal_spec: dict, value: int):
-    try:
-        return signal_spec['discrete_values'][value]
-    except KeyError:
-        return ''
-
-def get_label_value(*, signal_spec: dict, label: str):
-    for value, _label in signal_spec['discrete_values'].items():
-        if label == _label:
-            return value

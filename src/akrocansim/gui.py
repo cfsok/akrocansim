@@ -4,10 +4,10 @@ import os
 import dearpygui.dearpygui as dpg
 
 from .__init__ import __version__, __app_name__
+from . import version_check
+from . import signaltools
 from .transmitter import Transmitter
 from .config import Config
-from . import J1939
-from . import version_check
 
 VIEWPORT_WIDTH = 1500
 VIEWPORT_HEIGHT = 650
@@ -45,34 +45,44 @@ class AkrocansimGui:
             dpg.add_static_texture(logo_width, logo_height, logo_data, tag='logo')
 
         self.make_menu_bar()
-        self.load_config()
+        self.make_app_log_window()
+        self.make_tx_dashboard()
 
         dpg.setup_dearpygui()
         dpg.show_viewport()
         dpg.start_dearpygui()
 
         dpg.destroy_context()
-        if self.config.bus is not None:
-            self.config.bus.shutdown()
+        self.config.disconnect_can()
 
     def make_menu_bar(self):
         with dpg.viewport_menu_bar():
-            with dpg.menu(label="Settings"):
-                dpg.add_menu_item(tag='folder_explore', label='Explore configuration folder', callback=self.config.ext_browse)
-                dpg.add_menu_item(tag='config_edit', label='Edit configuration', callback=self.config.ext_edit)
-                dpg.add_menu_item(tag='J1939_parse', label='Parse J1939 Digital Annex', callback=self.parse_J1939DA)
-                dpg.add_menu_item(tag='config_load', label='Load configuration', callback=self.load_config)
+            with dpg.menu(label='Configuration'):
+                dpg.add_menu_item(label='Open folder', callback=self.config.ext_browse)
+                dpg.add_menu_item(label='Edit', callback=self.config.ext_edit)
+                dpg.add_menu_item(label='Load', callback=lambda: self.make_tx_dashboard)
+            with dpg.menu(label='Signals'):
+                dpg.add_menu_item(label='Parse J1939 Digital Annex',
+                                  callback=lambda: self.add_messages(self.config.parse_J1939DA()))
+                #with dpg.menu(label='Save all parsed J1939 PGNs and SPNs as'):
+                #    dpg.add_menu_item(label='Vector CANdb++')
+                #    dpg.add_menu_item(label='PCAN Symbols')
+                with dpg.menu(label='Save configured J1939 Tx PGNs and SPNs as'):
+                    dpg.add_menu_item(label='Vector CANdb++', callback=self.dump_tx_PGNs_SPNs_dbc)
+                    #dpg.add_menu_item(label='PCAN Symbols')
+            with dpg.menu(label='CAN interface'):
+                dpg.add_menu_item(label='Connect', callback=lambda: self.add_messages(self.connect_can()))
+                dpg.add_menu_item(label='Disconnect', callback=lambda: self.add_messages(self.disconnect_can()))
             with dpg.menu(label='Help'):
-                dpg.add_menu_item(label='Talk to us',
-                                  callback=lambda: webbrowser.open('https://github.com/cfsok/akrocansim/discussions'))
                 dpg.add_menu_item(label='Report a problem',
                                   callback=lambda: webbrowser.open('https://github.com/cfsok/akrocansim/issues'))
+                dpg.add_menu_item(label='Discussions',
+                                  callback=lambda: webbrowser.open('https://github.com/cfsok/akrocansim/discussions'))
                 dpg.add_menu_item(label='About', callback=self.make_about_window)
-            dpg.add_text('  |  ')
-            dpg.add_text(tag='status_bar')
 
     def make_about_window(self):
-        with dpg.window(label=f'About {__app_name__}', pos=(200, 100), modal=True, no_resize=True, no_move=True, autosize=True):
+        with dpg.window(label=f'About {__app_name__}', pos=(200, 100),
+                        modal=True, no_resize=True, no_move=True, autosize=True):
             with dpg.group(horizontal=True):
                 with dpg.group():
                     dpg.add_text('\n\n\n\n\nakrocansim\n')
@@ -88,42 +98,50 @@ class AkrocansimGui:
             _hyperlink('DearPyGui', 'https://github.com/hoffstadt/DearPyGui')
             _hyperlink('openpyxl', 'https://openpyxl.readthedocs.io/')
 
-    def load_config(self):
-        status_message, error_messages = self.config.load()
+    def connect_can(self):
+        msg = self.config.connect_can()
+        self.transmitter.bus = self.config.bus
+        return msg
 
-        dpg.set_value(item='status_bar', value=status_message)
-        if 'new configuration file created' in status_message:
-            instructions = 'Use the Settings menu to edit the configuration file.'
-            self.show_messages([instructions])
-        elif 'J1939DA has not been parsed' in status_message:
-            instructions = 'Use the Settings menu to parse J1939DA and reload configuration.'
-            self.show_messages([instructions])
-        elif error_messages:
-            if dpg.does_item_exist('J1939_window'):
-                dpg.delete_item('J1939_window')
-            self.show_messages(error_messages)
-        else:
-            self.J1939 = self.config.J1939_spec
-            self.transmitter = Transmitter(self.J1939, self.config.bus)
-            self.make_PGN_global_tx_management_window()
-            self.make_J1939_window()
+    def disconnect_can(self):
+        msg = self.config.disconnect_can()
+        self.transmitter.bus = None
+        return msg
 
-    def parse_J1939DA(self):
-        parsing_result = self.config.parse_J1939DA()
-        dpg.set_value(item='status_bar', value=parsing_result)
+    def dump_tx_PGNs_SPNs_dbc(self, sender, app_data, user_data):
+        message = self.config.dump_tx_PGNs_SPNs_dbc()
+        self.add_messages(message)
 
-    def show_messages(self, messages: list[str]):
-        if not dpg.does_item_exist('config_messages'):
-            with dpg.window(pos=(0, 19), width=WINDOW_WIDTH, height=VIEWPORT_HEIGHT - 58,
-                            no_move=True, no_resize=True, no_title_bar=True, no_close=True):
-                dpg.add_text(tag='config_messages')
-        error_text = ''
-        for message in messages:
-            error_text += message + '\n'*2
-        dpg.set_value(item='config_messages', value=error_text)
+    def make_app_log_window(self):
+        with dpg.window(pos=(570, 19), width=914, no_close=True, no_title_bar=True, no_move=True, no_resize=True):
+            dpg.add_text(tag='log')
 
-    def make_PGN_global_tx_management_window(self):  # put user_data='all PGNs' to tag
-        with dpg.window(label=self.config.bus.channel_info, width=570, no_close=True):
+    def add_messages(self, messages, clear_existing=False):
+        _messages = ''
+        if isinstance(messages, str):
+            messages = [messages]
+        for msg in messages:
+            if msg:
+                _messages += f'- {msg}\n'
+
+        if not clear_existing:
+            _messages = dpg.get_value('log') + _messages
+
+        dpg.set_value('log', _messages)
+
+    def make_tx_dashboard(self):
+        self.add_messages(self.config.load())
+        self.J1939 = self.config.J1939_spec
+        self.transmitter = Transmitter(self.J1939)
+        if dpg.does_item_exist('global_tx_window'):
+            dpg.delete_item('global_tx_window')
+        self.make_PGN_global_tx_window()
+        if dpg.does_item_exist('transmitter_window'):
+            dpg.delete_item('transmitter_window')
+        self.make_transmitter_window()
+
+    def make_PGN_global_tx_window(self):  # put user_data='all PGNs' to tag
+        with dpg.window(tag='global_tx_window', pos=(0, 19), width=570, no_close=True, no_title_bar=True, no_move=True, no_resize=True):
             with dpg.group(horizontal=True):
                 dpg.add_text('Continuous J1939 PGN transmission:')
                 dpg.add_radio_button(tag='global_tx_mode', items=('Stop All', 'Tx All', 'Use PGN Settings'),
@@ -146,8 +164,8 @@ class AkrocansimGui:
     def global_tx_once_invoked(self, sender, app_data, user_data):
         self.transmitter.set_tx_once()
 
-    def make_J1939_window(self):
-        with dpg.window(tag='J1939_window', label='J1939', width=WINDOW_WIDTH, pos=(0, 119), height=500, no_close=True):
+    def make_transmitter_window(self):
+        with dpg.window(tag='transmitter_window', label='Tx signals', width=WINDOW_WIDTH, pos=(0, 119), height=500, no_close=True):
             for pgn, spns in self.config.tx_PGNs_SPNs.items():
                 self.add_pgn(pgn, spns)
 
@@ -217,12 +235,12 @@ class AkrocansimGui:
                                 dpg.add_text(tag=f'{spn}_hex')
 
                                 # RAW DECIMAL
-                                min_value = J1939.raw_min_value(signal_spec=spn_spec)
+                                min_value = signaltools.raw_min_value(signal_spec=spn_spec)
                                 dpg.add_slider_int(tag=str(spn), user_data=(pgn, spn, spn_spec),
                                                    label=f"SPN {spn}: {spn_spec['SPN Name']}",
                                                    min_value=min_value,
-                                                   max_value=J1939.raw_max_value(signal_spec=spn_spec),
-                                                   default_value=J1939.raw_min_value(signal_spec=spn_spec),
+                                                   max_value=signaltools.raw_max_value(signal_spec=spn_spec),
+                                                   default_value=signaltools.raw_min_value(signal_spec=spn_spec),
                                                    callback=self.continuous_spn_slider_changed)
                             self.continuous_spn_slider_changed(str(spn), min_value, (pgn, spn, spn_spec))
 
@@ -254,7 +272,7 @@ class AkrocansimGui:
                                 # OPTIONS
                                 labels = [label for label in spn_spec['discrete_values'].values()]
                                 dpg.add_combo(tag=f'{pgn}_{spn}_combo', items=labels, user_data=(pgn, spn, spn_spec),
-                                              default_value=J1939.get_label(signal_spec=spn_spec, value=0),
+                                              default_value=signaltools.get_label(signal_spec=spn_spec, value=0),
                                               label=f"SPN {spn}: {spn_spec['SPN Name']}",
                                               callback=self.discrete_spn_combo_changed)
                             self.discrete_spn_input_int_changed(str(spn), 0, (pgn, spn, spn_spec))
@@ -292,9 +310,7 @@ class AkrocansimGui:
         pgn, spn, signal_spec = pgn__spn__spn_spec
         self.transmitter.modify_pgn_data(pgn, spn, raw_value)
 
-        decoded_value = J1939.decode(raw_value=raw_value,
-                                     scale=signal_spec['scale'],
-                                     offset=signal_spec['offset'])
+        decoded_value = signaltools.decode(raw_value=raw_value, scale=signal_spec['scale'], offset=signal_spec['offset'])
         # :4.{len(str(J1939[pgn]['SPNs'][spn]['scale']).split('.')[1])}f
         dpg.set_value(f'{pgn}_{spn}_input', decoded_value)
         # dpg.set_item_user_data(f'{pgn}_{spn}_input', decoded_value)
@@ -321,7 +337,7 @@ class AkrocansimGui:
 
     def continuous_spn_input_int_changed(self, sender, real_value, pgn__spn__spn_spec):
         pgn, spn, spn_spec = pgn__spn__spn_spec
-        raw_value = J1939.encode(decoded_value=real_value, scale=spn_spec['scale'], offset=spn_spec['offset'])
+        raw_value = signaltools.encode(decoded_value=real_value, scale=spn_spec['scale'], offset=spn_spec['offset'])
         slider_tag = str(spn)
         dpg.set_value(slider_tag, raw_value)
         self.continuous_spn_slider_changed(slider_tag, raw_value, pgn__spn__spn_spec)
@@ -336,7 +352,7 @@ class AkrocansimGui:
     def discrete_spn_input_int_changed(self, sender, raw_value, pgn__spn__spn_spec):
         pgn, spn, signal_spec = pgn__spn__spn_spec
         self.transmitter.modify_pgn_data(pgn, spn, raw_value)
-        dpg.set_value(f'{pgn}_{spn}_combo', J1939.get_label(signal_spec=signal_spec, value=raw_value))
+        dpg.set_value(f'{pgn}_{spn}_combo', signaltools.get_label(signal_spec=signal_spec, value=raw_value))
 
         match signal_spec['length_bits']:
             case 1 | 2 | 3 | 4 as length_bits:
@@ -350,7 +366,7 @@ class AkrocansimGui:
 
     def discrete_spn_combo_changed(self, sender, real_value, pgn__spn__spn_spec):
         pgn, spn, spn_spec = pgn__spn__spn_spec
-        raw_value = J1939.get_label_value(signal_spec=spn_spec, label=real_value)
+        raw_value = signaltools.get_label_value(signal_spec=spn_spec, label=real_value)
         input_int_widget = str(spn)
         dpg.set_value(input_int_widget, raw_value)
         self.discrete_spn_input_int_changed(input_int_widget, raw_value, pgn__spn__spn_spec)

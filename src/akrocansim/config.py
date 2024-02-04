@@ -7,7 +7,9 @@ import pickle
 
 import can
 
-from .import J1939
+from . import J1939DA
+from . import dbc
+
 
 default_config_toml = '''[CAN_INTERFACE]
 # akrocansim uses the python-can library for utilising CAN interfaces.
@@ -77,132 +79,114 @@ class Config:
         else:
             self.config_dir = config_dir
         self.config_toml = self.config_dir/'config.toml'
-        self.J1939_dir = self.config_dir/'J1939'
+        self.J1939DA_dir = self.config_dir / 'J1939DA'
         self.J1939DA_xlsx = None
-        self.J1939_pickle = self.J1939_dir/'J1939.pkl'
+        self.J1939DA_pickle = self.J1939DA_dir / 'J1939DA.pkl'
 
         self._config = {}
 
         self.J1939_spec = None
         self.bus = None
         self.tx_PGNs_SPNs = {}
+        self.tx_PGNs_SPNs_dbc = self.config_dir / 'Tx_PGNs_SPNs.dbc'
 
-    def load(self) -> (str, list[str]):
-        status_message = ''
-        error_messages = []
+    def load(self):
+        messages = []
 
-        state = 'INIT'
-        while True:
-            match state:
-                case 'INIT':
-                    if self.config_toml.exists():
-                        state = 'CONFIG_PRESENT'
+        if not self.config_toml.exists():
+            self.config_dir.mkdir(exist_ok=True)
+            self.J1939DA_dir.mkdir(exist_ok=True)
+            with self.config_toml.open(mode='w', encoding='utf-8') as f:
+                f.write(default_config_toml)
+            messages.append(f'INFO: configuration file created: {self.config_toml}')
+            messages.append('INFO: follow the instructions in the configuration file: MENU > Configuration > Edit')
+        else:
+            try:
+                with self.config_toml.open('rb') as f:
+                    self._config = tomllib.load(f)
+            except tomllib.TOMLDecodeError as e:
+                messages.append(f'ERROR: incompatible configuration file - {e}')
+
+            if '?' in self._config['J1939DA']['filename']:
+                messages.append(f'INFO: [J1939DA] filename has not been specified in the configuration file')
+            elif Path(self._config['J1939DA']['filename']).suffix != '.xlsx':
+                messages.append('ERROR: J1939DA filename must be in .xlsx format')
+            else:
+                self.J1939DA_xlsx = self.J1939DA_dir / self._config['J1939DA']['filename']
+                if not self.J1939DA_xlsx.exists():
+                    messages.append(f'ERROR: {self.J1939DA_xlsx} file not found')
+                else:
+                    if not self.J1939DA_pickle.exists():
+                        messages.append(self.parse_J1939DA())
                     else:
-                        state = 'CONFIG_NOT_PRESENT'
-
-                case 'CONFIG_NOT_PRESENT':
-                    self.config_dir.mkdir(exist_ok=True)
-                    self.J1939_dir.mkdir(exist_ok=True)
-                    with self.config_toml.open(mode='w', encoding='utf-8') as f:
-                        f.write(default_config_toml)
-                    status_message = f'new configuration file created at {self.config_toml}'
-                    state = 'RETURN'
-
-                case 'CONFIG_PRESENT':
-                    try:
-                        with self.config_toml.open('rb') as f:
-                            self._config = tomllib.load(f)
-                        state = 'CHECK_CAN_CONFIG'
-                    except tomllib.TOMLDecodeError as e:
-                        status_message = 'configuration file cannot be loaded'
-                        error_messages.append(f'FORMAT ERROR: {e}')
-                        state = 'RETURN'
-
-                case 'CHECK_CAN_CONFIG':
-                    if self.bus is not None:
-                        self.bus.shutdown()
-                    try:
-                        if not self._config['CAN_INTERFACE']:
-                            status_message = 'incorrect or incomplete configuration'
-                            error_messages.append('MISSING ELEMENT ERROR: CAN interface configuration parameters'
-                                                  ' not found in [CAN_INTERFACE] section')
-                        else:
-                            try:
-                                self.bus = can.Bus(**self._config['CAN_INTERFACE'])
-                            except can.exceptions.CanError as e:
-                                status_message = 'incorrect or incomplete configuration'
-                                error_messages.append(f'CAN INTERFACE ERROR: {e}')
-                    except KeyError:
-                        status_message = 'incorrect or incomplete configuration'
-                        error_messages.append(f'MISSING ELEMENT ERROR: [CAN_INTERFACE] section not found')
-                    state = 'CHECK_J1939DA'
-
-                case 'CHECK_J1939DA':
-                    if '?' in self._config['J1939DA']['filename']:
-                        status_message = 'incorrect or incomplete configuration'
-                        error_messages.append(f'INCORRECT ELEMENT ERROR: [J1939DA] filename has not been set')
-                        state = 'RETURN'
-                    elif Path(self._config['J1939DA']['filename']).suffix != '.xlsx':
-                        status_message = 'incorrect or incomplete configuration'
-                        error_messages.append('INCORRECT ELEMENT ERROR: J1939DA filename must be in .xlsx format')
-                        state = 'RETURN'
-                    else:
-                        self.J1939DA_xlsx = self.J1939_dir/self._config['J1939DA']['filename']
-                        if not self.J1939DA_xlsx.exists():
-                            status_message = 'incorrect or incomplete configuration'
-                            error_messages.append(f'INCORRECT ELEMENT ERROR: {self.J1939DA_xlsx} file not found')
-                            state = 'RETURN'
-                        else:
-                            state = 'CHECK_J1939_PKL'
-
-                    # I think it's all good until here.
-
-                case 'CHECK_J1939_PKL':
-                    if not self.J1939_pickle.exists():
-                        status_message = 'J1939DA has not been parsed'
-                        state = 'RETURN'
-                    else:
-                        with self.J1939_pickle.open('rb') as f:
+                        with self.J1939DA_pickle.open('rb') as f:
                             self.J1939_spec = pickle.load(f)
-                            state = 'CHECK_TX_SPNS'
+                            messages.append(f'INFO: loaded: {self.J1939DA_pickle}')
 
-                case 'CHECK_TX_SPNS':
-                    if not self._config['Tx_PGNs_SPNs']:
-                        status_message = 'incorrect or incomplete configuration'
-                        error_messages.append('INCORRECT ELEMENT ERROR: PGNs not found in [Tx_PGNs_SPNs] section')
-                    else:
-                        pgn_spn_errors_found = False
-                        for pgn, spn_list in self._config['Tx_PGNs_SPNs'].items():
-                            try:
-                                _ = self.J1939_spec[int(pgn)]
-                                for spn in spn_list:
-                                    try:
-                                        _ = self.J1939_spec[int(pgn)]['SPNs'][spn]
-                                    except KeyError:
-                                        pgn_spn_errors_found = True
-                                        status_message = 'incorrect or incomplete configuration'
-                                        error_messages.append(
-                                            f'MISSING SPN ERROR: SPN {spn} not found in parsed elements of J1939DA')
-                            except KeyError:
-                                pgn_spn_errors_found = True
-                                status_message = 'incorrect or incomplete configuration'
-                                error_messages.append(
-                                    f'MISSING PGN ERROR: PGN {pgn} not found in parsed elements of J1939DA')
-                            if not pgn_spn_errors_found:
-                                self.tx_PGNs_SPNs[int(pgn)] = spn_list
+                        if not self._config['Tx_PGNs_SPNs']:
+                            messages.append('ERROR: PGNs not found in [Tx_PGNs_SPNs] section of configuration file')
+                        else:
                             pgn_spn_errors_found = False
+                            for pgn, spn_list in self._config['Tx_PGNs_SPNs'].items():
+                                try:
+                                    _ = self.J1939_spec[int(pgn)]
+                                    for spn in spn_list:
+                                        try:
+                                            _ = self.J1939_spec[int(pgn)]['SPNs'][spn]
+                                        except KeyError:
+                                            pgn_spn_errors_found = True
+                                            messages.append(f'ERROR: SPN {spn} not found in parsed elements of J1939DA')
+                                except KeyError:
+                                    pgn_spn_errors_found = True
+                                    messages.append(f'ERROR: PGN {pgn} not found in parsed elements of J1939DA')
+                                if not pgn_spn_errors_found:
+                                    self.tx_PGNs_SPNs[int(pgn)] = spn_list
+                                pgn_spn_errors_found = False
 
-                    state = 'RETURN'
+        return messages
 
-                case 'RETURN':
-                    return status_message, error_messages
+    def connect_can(self):
+        messages = []
 
-                case _:
-                    raise Exception()
+        if not self._config:
+            messages.append('ERROR: configuration file has not been loaded')
+        elif self.bus is not None:
+            messages.append(self.disconnect_can())
+        try:
+            if not self._config['CAN_INTERFACE']:
+                messages.append('ERROR: CAN interface configuration parameters not found '
+                                'in [CAN_INTERFACE] section of configuration file')
+            else:
+                try:
+                    self.bus = can.Bus(**self._config['CAN_INTERFACE'])
+                    messages.append(f"INFO: connected to: {self.bus.channel_info}, "
+                                    f"bit rate: {self._config['CAN_INTERFACE']['bitrate'] / 1000:.0f} kbit/s")
+                except can.exceptions.CanError as e:
+                    messages.append(f'ERROR: {e}')
+        except KeyError:
+            messages.append(f'ERROR: [CAN_INTERFACE] section not found in configuration file')
 
-    def parse_J1939DA(self) -> str:
-        parsing_result = J1939.parse_J1939DA(J1939_dir=self.J1939_dir, J1939DA_config=self._config['J1939DA'])
-        return parsing_result
+        return messages
+
+    def disconnect_can(self):
+        if self.bus is not None:
+            channel_info = self.bus.channel_info
+            self.bus.shutdown()
+            self.bus = None
+            return f'INFO: {channel_info} disconnected'
+        else:
+            return 'INFO: CAN bus is not connected'
+
+    def parse_J1939DA(self):
+        parsing_result = J1939DA.parse_J1939DA(J1939DA_config=self._config['J1939DA'],
+                                               J1939DA_dir=self.J1939DA_dir,
+                                               J1939DA_pickle=self.J1939DA_pickle)
+        messages = [f'INFO: {parsing_result}', 'reload configuration to use parsed J1939DA definitions']
+        return messages
+
+    def dump_tx_PGNs_SPNs_dbc(self):
+        dbc.dump_J1939_dbc(J1939DA=self.J1939_spec, PGNs_SPNs=self.tx_PGNs_SPNs, PGNs_SPNs_dbc=self.tx_PGNs_SPNs_dbc)
+        return f'INFO: DBC file created: {self.tx_PGNs_SPNs_dbc}'
 
     def ext_browse(self) -> None:
         path = str(self.config_dir)
