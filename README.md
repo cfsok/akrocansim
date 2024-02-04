@@ -3,7 +3,6 @@ A CAN bus J1939 controller simulator.
 
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/akrocansim)](https://github.com/cfsok/akrocansim)
 [![PyPI - Version](https://img.shields.io/pypi/v/akrocansim?color=blue)](https://pypi.org/project/akrocansim/)
-![Pepy Total Downlods](https://img.shields.io/pepy/dt/akrocansim)
 ![PyPI - License](https://img.shields.io/pypi/l/akrocansim)
 
 
@@ -56,5 +55,8 @@ These can be inspected to evaluate parsing correctness.
 The J1939DA PGN and SPN definition format is very irregular and parsing errors still exist.
 You can raise a GitHub issue or a pull request if you think that an SPN has not been parsed correctly.
 
-## Discussion
-Please raise issues or feature requests, or ask questions, using the [GitHub issue tracker](https://github.com/cfsok/akrocansim/issues).
+## Issues
+[GitHub issue tracker](https://github.com/cfsok/akrocansim/issues)
+
+## Discussions
+[GitHub discussions](https://github.com/cfsok/akrocansim/discussions)
