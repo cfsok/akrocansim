@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l /c/projects/akrocansim/src/akrocansim/*.py)"
+    ]
+  }
+}
